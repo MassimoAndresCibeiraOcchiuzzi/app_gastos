@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { traerTransacciones } from "@/lib/consultas";
+import { traerTransacciones, traerCategoriasUsuario } from "@/lib/consultas";
 import BotonExportar from "@/components/boton-exportar";
 import Encabezado from "@/components/encabezado";
-import FormularioTransaccion from "@/components/formulario-transaccion";
+import PanelAlta from "@/components/panel-alta";
 import ListaTransacciones from "@/components/lista-transacciones";
 import Navegacion from "@/components/navegacion";
 import ResumenMes from "@/components/resumen-mes";
@@ -29,6 +29,7 @@ export default async function Home({
   const { desde, hasta } = rangoMes(mes);
 
   const { transacciones, error } = await traerTransacciones({ desde, hasta });
+  const categoriasUsuario = await traerCategoriasUsuario();
 
   const ingresos = totalPorTipo(transacciones, "ingreso");
   const egresos = totalPorTipo(transacciones, "egreso");
@@ -45,11 +46,10 @@ export default async function Home({
 
       <ResumenMes ingresos={ingresos} egresos={egresos} />
 
-      {/* key={mes}: al cambiar de mes el formulario se rearma con la fecha nueva. */}
-      <FormularioTransaccion
-        key={mes}
+      <PanelAlta
         fechaPorDefecto={mes === mesDeHoy ? hoyISO() : desde}
         cuentasConocidas={cuentasConocidas}
+        categoriasIniciales={categoriasUsuario}
       />
 
       <div className="flex items-center justify-between gap-3">

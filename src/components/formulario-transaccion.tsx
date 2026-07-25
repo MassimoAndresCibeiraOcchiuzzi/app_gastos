@@ -1,13 +1,10 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import {
-  CATEGORIAS_CONSUMO,
-  CATEGORIA_POR_DEFECTO,
-  CUENTAS_SUGERIDAS,
-} from "@/lib/categorias";
+import { CATEGORIA_POR_DEFECTO, CUENTAS_SUGERIDAS } from "@/lib/categorias";
 import { crearTransaccion } from "@/app/actions/transacciones";
 import { ESTADO_INICIAL, type EstadoFormulario } from "@/lib/formulario";
+import SelectorCategoria from "@/components/selector-categoria";
 
 const INPUT =
   "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50";
@@ -38,9 +35,13 @@ const valoresVacios = (fecha: string): Valores => ({
 export default function FormularioTransaccion({
   fechaPorDefecto,
   cuentasConocidas,
+  categorias,
+  onCrearCategoria,
 }: {
   fechaPorDefecto: string;
   cuentasConocidas: string[];
+  categorias: string[];
+  onCrearCategoria: (nombre: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [estado, setEstado] = useState<EstadoFormulario>(ESTADO_INICIAL);
   const [pendiente, iniciarEnvio] = useTransition();
@@ -161,19 +162,17 @@ export default function FormularioTransaccion({
           <label htmlFor="categoria" className={ETIQUETA}>
             Categoría
           </label>
-          <select
+          {/* SelectorCategoria no expone un <select name>, así que el valor
+              viaja en este hidden para que lo tome el FormData del form. */}
+          <input type="hidden" name="categoria" value={valores.categoria} />
+          <SelectorCategoria
             id="categoria"
-            name="categoria"
             value={valores.categoria}
-            onChange={cambiar("categoria")}
-            className={`${INPUT} mt-1`}
-          >
-            {CATEGORIAS_CONSUMO.map((categoria) => (
-              <option key={categoria} value={categoria}>
-                {categoria}
-              </option>
-            ))}
-          </select>
+            categorias={categorias}
+            onChange={(c) => setValores((v) => ({ ...v, categoria: c }))}
+            onCrear={onCrearCategoria}
+            className="mt-1"
+          />
           <Error mensaje={estado.errores?.categoria} />
         </div>
 

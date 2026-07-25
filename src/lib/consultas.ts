@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import type { Transaccion } from "@/lib/types";
+import type { CategoriaUsuario, Transaccion } from "@/lib/types";
 
 const POR_PAGINA = 1000; // tope que devuelve PostgREST por request
 const MAX_PAGINAS = 50;
@@ -52,4 +52,20 @@ export async function traerTransacciones({
   }
 
   return { transacciones: filas, error: null };
+}
+
+/**
+ * Trae las categorías personalizadas del usuario, alfabéticas.
+ * Si la tabla todavía no existe (no corrieron el SQL), devuelve una lista vacía
+ * en vez de romper: la app sigue andando con las categorías del sistema.
+ */
+export async function traerCategoriasUsuario(): Promise<CategoriaUsuario[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("categorias")
+    .select("id, nombre")
+    .order("nombre", { ascending: true });
+
+  if (error) return [];
+  return (data ?? []) as CategoriaUsuario[];
 }

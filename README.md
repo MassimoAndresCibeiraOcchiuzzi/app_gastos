@@ -44,6 +44,31 @@ PWA de control de gastos personales — **Next.js 16 (App Router) + TypeScript +
 - [x] "Confirmar e importar" inserta con `origen='pdf'`
 - [x] Errores con mensaje claro en vez de pantalla rota
 
+**Fase 6 — Categorías propias**
+
+- [x] Tabla `categorias` con RLS (SQL en `supabase/categorias.sql`)
+- [x] Selector que combina las del sistema con las propias del usuario
+- [x] "+ Agregar categoría nueva" que la crea sin salir de la pantalla (en el
+      alta manual y en la tabla de revisión del import)
+- [x] Modal "Categorías" para ver y borrar las propias
+- [x] No deja borrar una categoría que tiene transacciones (avisa cuántas)
+- [x] Dashboard y torta reflejan las nuevas sin tocar código
+
+### Sobre las categorías
+
+Las **8 del sistema** (Comida, Transporte, Suscripciones, Alquiler, Servicios,
+Entretenimiento, Salud, Otros) viven en código (`src/lib/categorias.ts`,
+`CATEGORIAS_CONSUMO`): son iguales para todos, versionadas, sin sembrar nada por
+usuario. La tabla `categorias` guarda **sólo las personalizadas**, con RLS para
+que cada uno vea las suyas.
+
+Las transacciones guardan la categoría como **texto**, no como id: por eso una
+categoría se puede borrar sólo si no la usa ninguna transacción, y por eso la
+torta agrupa por el nombre y toma cualquier categoría nueva sin cambios de
+código. El color de una personalizada sale de un hash estable de su nombre sobre
+los 8 tonos validados (mismo nombre → mismo color); la torta muestra el nombre
+al lado de cada porción, así el color nunca es el único canal.
+
 ### Sobre la importación
 
 La `ANTHROPIC_API_KEY` vive sólo en el servidor: la llamada se hace desde
@@ -208,10 +233,13 @@ completá las tres variables: las dos de Supabase (Dashboard → Project Setting
 API) y `ANTHROPIC_API_KEY` (console.anthropic.com → API Keys), que sólo se usa
 del lado del servidor para leer los PDF.
 
-### 2. Crear la tabla en Supabase
+### 2. Crear las tablas en Supabase
 
 Abrir Supabase Dashboard → **SQL Editor** → New query, pegar el contenido de
-[`supabase/schema.sql`](supabase/schema.sql) y ejecutar.
+[`supabase/schema.sql`](supabase/schema.sql) y ejecutar. Después, otra query con
+[`supabase/categorias.sql`](supabase/categorias.sql) para la tabla de categorías
+personalizadas (si no la corrés, la app funciona igual pero sólo con las 8 del
+sistema).
 
 ### 3. Configurar las URLs de Auth
 
@@ -242,6 +270,10 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/app/page.tsx` | Movimientos: resumen + alta + lista del mes |
 | `src/app/dashboard/page.tsx` | Dashboard: torta, top 3 y barras de 6 meses |
 | `src/app/actions/transacciones.ts` | Server actions de alta y borrado |
+| `src/app/actions/categorias.ts` | Server actions de crear y borrar categorías |
+| `src/components/selector-categoria.tsx` | Selector de categoría con alta inline |
+| `src/components/use-categorias.ts` | Estado compartido de categorías propias |
+| `src/components/gestor-categorias.tsx` | Modal para ver y borrar las propias |
 | `src/app/api/exportar/route.ts` | Genera y sirve el CSV del historial |
 | `src/lib/csv.ts` | Armado y escapado del CSV |
 | `src/app/importar/page.tsx` | Pantalla de importación de resúmenes |
@@ -252,12 +284,13 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/components/graficos/` | Torta y barras (recharts) |
 | `src/lib/consultas.ts` | Lectura de transacciones, paginada |
 | `src/lib/agregados.ts` | Totales por tipo, por categoría y por mes |
-| `src/lib/categorias.ts` | Categorías y su color (editá acá para agregar/sacar) |
+| `src/lib/categorias.ts` | Categorías del sistema, su color y el largo máximo |
 | `src/lib/formato.ts` | Pesos, fechas y navegación de meses |
 | `tests/` | Tests de esa lógica (`npm test`) |
 | `src/app/manifest.ts` | Manifest de la PWA |
 | `public/sw.js` | Service worker (fallback offline) |
 | `supabase/schema.sql` | Tabla `transacciones` + políticas RLS |
+| `supabase/categorias.sql` | Tabla `categorias` (personalizadas) + políticas RLS |
 
 ## Nota sobre el magic link
 

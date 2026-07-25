@@ -1,4 +1,4 @@
-import { esCategoriaValida } from "./categorias";
+import { MAX_CATEGORIA } from "./categorias";
 import { MONTO_MAXIMO, esFechaISO, parsearMonto } from "./formato";
 import type { CampoFormulario } from "./formulario";
 import type { Origen, Tipo } from "./types";
@@ -70,9 +70,14 @@ export function validarTransaccion(
     errores.tipo = "Elegí ingreso o egreso.";
   }
 
-  const categoria = entrada.categoria;
-  if (!esCategoriaValida(categoria)) {
-    errores.categoria = "Categoría desconocida.";
+  // La categoría es texto libre: puede ser del sistema o una personalizada del
+  // usuario. Sólo validamos que no esté vacía y que no sea absurdamente larga;
+  // qué categorías existen lo maneja el selector, no esta función pura.
+  const categoria = entrada.categoria.trim();
+  if (categoria === "") {
+    errores.categoria = "Elegí una categoría.";
+  } else if (categoria.length > MAX_CATEGORIA) {
+    errores.categoria = `Máximo ${MAX_CATEGORIA} caracteres.`;
   }
 
   const cuenta = entrada.cuenta.trim();

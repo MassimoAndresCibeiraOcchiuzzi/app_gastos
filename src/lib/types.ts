@@ -14,3 +14,6 @@ export type Transaccion = {
   usuario_id: string;
   created_at: string;
 };
+
+/** Una categoría personalizada (ver supabase/categorias.sql). */
+export type CategoriaUsuario = { id: string; nombre: string };

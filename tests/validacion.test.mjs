@@ -82,10 +82,24 @@ test("validarTransaccion acepta la categoría Ajustes tarjeta", () => {
   assert.equal(r.valor.categoria, "Ajustes tarjeta");
 });
 
+test("validarTransaccion acepta una categoría personalizada", () => {
+  // "Viajes" no es del sistema, pero es un nombre válido que el usuario pudo
+  // haber creado. La validación es texto libre: no conoce la lista.
+  const r = validarTransaccion({ ...base, categoria: "Viajes" });
+  assert.equal(r.ok, true);
+  assert.equal(r.valor.categoria, "Viajes");
+});
+
+test("validarTransaccion rechaza categoría vacía o demasiado larga", () => {
+  assert.ok(validarTransaccion({ ...base, categoria: "   " }).errores.categoria);
+  assert.ok(
+    validarTransaccion({ ...base, categoria: "x".repeat(41) }).errores.categoria,
+  );
+});
+
 test("validarTransaccion rechaza el resto de los campos inválidos", () => {
   assert.ok(validarTransaccion({ ...base, descripcion: "   " }).errores.descripcion);
   assert.ok(validarTransaccion({ ...base, tipo: "otro" }).errores.tipo);
-  assert.ok(validarTransaccion({ ...base, categoria: "Viajes" }).errores.categoria);
   assert.ok(validarTransaccion({ ...base, fecha: "2026-02-30" }).errores.fecha);
   assert.ok(validarTransaccion({ ...base, cuenta: "x".repeat(61) }).errores.cuenta);
   assert.ok(

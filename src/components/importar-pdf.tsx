@@ -2,7 +2,10 @@
 
 import { useRef, useState, useTransition } from "react";
 import { importarTransacciones } from "@/app/actions/transacciones";
-import { CATEGORIAS_CONSUMO, CATEGORIA_AJUSTES } from "@/lib/categorias";
+import { CATEGORIA_AJUSTES } from "@/lib/categorias";
+import SelectorCategoria from "@/components/selector-categoria";
+import { useCategorias } from "@/components/use-categorias";
+import type { CategoriaUsuario } from "@/lib/types";
 import {
   esMesValido,
   formatearARS,
@@ -89,9 +92,13 @@ function aFilaAjuste(ajuste: Ajuste, id: number, fechaImputacion: string): Fila 
 
 export default function ImportarPdf({
   mesPorDefecto,
+  categoriasIniciales,
 }: {
   mesPorDefecto: string;
+  categoriasIniciales: CategoriaUsuario[];
 }) {
+  const { nombres: categorias, crear: crearCategoria } =
+    useCategorias(categoriasIniciales);
   const [estado, setEstado] = useState<Estado>("vacio");
   const [error, setError] = useState<string | null>(null);
   const [filas, setFilas] = useState<Fila[]>([]);
@@ -580,20 +587,14 @@ export default function ImportarPdf({
                         className={`${INPUT} mt-0.5 disabled:opacity-60`}
                       />
                     ) : (
-                      <select
+                      <SelectorCategoria
                         id={`categoria-${fila.id}`}
                         value={fila.categoria}
-                        onChange={(e) =>
-                          editar(fila.id, "categoria", e.target.value)
-                        }
-                        className={`${INPUT} mt-0.5`}
-                      >
-                        {CATEGORIAS_CONSUMO.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
+                        categorias={categorias}
+                        onChange={(c) => editar(fila.id, "categoria", c)}
+                        onCrear={crearCategoria}
+                        className="mt-0.5"
+                      />
                     )}
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { traerCategoriasUsuario } from "@/lib/consultas";
 import Encabezado from "@/components/encabezado";
 import ImportarPdf from "@/components/importar-pdf";
 import Navegacion from "@/components/navegacion";
@@ -23,6 +24,7 @@ export default async function Importar({
   // El `mes` de la URL sólo mantiene la navegación coherente entre pestañas.
   // El del resumen arranca siempre en el mes actual, que es cuando se paga.
   const mes = esMesValido(mesPedido) ? mesPedido : mesActual();
+  const categoriasUsuario = await traerCategoriasUsuario();
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 py-8">
@@ -38,7 +40,10 @@ export default async function Importar({
         </p>
       </div>
 
-      <ImportarPdf mesPorDefecto={mesActual()} />
+      <ImportarPdf
+        mesPorDefecto={mesActual()}
+        categoriasIniciales={categoriasUsuario}
+      />
     </main>
   );
 }
