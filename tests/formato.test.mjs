@@ -13,6 +13,8 @@ import {
   etiquetaMesCorta,
   formatearCompacto,
   ultimosMeses,
+  primerDia,
+  formatearFechaNumerica,
 } from "../src/lib/formato.ts";
 
 // Espacio angosto que usa Intl entre el símbolo y el número.
@@ -114,6 +116,24 @@ test("ultimosMeses termina en el mes pedido y cruza el año", () => {
   ]);
   assert.deepEqual(ultimosMeses("2026-01", 3), ["2025-11", "2025-12", "2026-01"]);
   assert.deepEqual(ultimosMeses("2026-07", 1), ["2026-07"]);
+});
+
+test("primerDia arma la fecha de imputación del resumen", () => {
+  assert.equal(primerDia("2026-07"), "2026-07-01");
+  assert.equal(primerDia("2025-12"), "2025-12-01");
+  assert.equal(esFechaISO(primerDia("2026-02")), true);
+});
+
+test("formatearFechaNumerica muestra el año", () => {
+  assert.equal(formatearFechaNumerica("2026-06-03"), "03/06/2026");
+  assert.equal(formatearFechaNumerica("2025-11-30"), "30/11/2025");
+});
+
+test("formatearFechaNumerica devuelve tal cual lo que no es una fecha", () => {
+  // Es dato de referencia que viene del PDF: no vale romper la pantalla.
+  assert.equal(formatearFechaNumerica("s/f"), "s/f");
+  assert.equal(formatearFechaNumerica("2026-02-30"), "2026-02-30");
+  assert.equal(formatearFechaNumerica(""), "");
 });
 
 test("validación de mes y fecha", () => {

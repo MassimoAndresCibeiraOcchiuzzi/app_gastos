@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import {
-  CATEGORIAS,
+  CATEGORIAS_CONSUMO,
   CATEGORIA_POR_DEFECTO,
   CUENTAS_SUGERIDAS,
 } from "@/lib/categorias";
@@ -168,7 +168,7 @@ export default function FormularioTransaccion({
             onChange={cambiar("categoria")}
             className={`${INPUT} mt-1`}
           >
-            {CATEGORIAS.map((categoria) => (
+            {CATEGORIAS_CONSUMO.map((categoria) => (
               <option key={categoria} value={categoria}>
                 {categoria}
               </option>

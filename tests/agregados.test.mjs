@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   totalPorTipo,
   egresosPorCategoria,
+  totalEgresosPorCategoria,
   agruparCola,
   totalesPorMes,
 } from "../src/lib/agregados.ts";
@@ -38,6 +39,45 @@ test("totalPorTipo no arrastra error de punto flotante", () => {
     t("2026-07-02", "egreso", 0.2),
   ];
   assert.equal(totalPorTipo(datos, "egreso"), 0.3);
+});
+
+test("un egreso negativo (ajuste de impuestos) resta de los egresos", () => {
+  const datos = [
+    t("2026-06-03", "egreso", 178230.49, "Comida"),
+    t("2026-06-30", "egreso", -17197.39, "Ajustes tarjeta"),
+  ];
+  assert.equal(totalPorTipo(datos, "egreso"), 161033.1);
+  // Y no toca los ingresos: el ajuste es egreso, no ingreso.
+  assert.equal(totalPorTipo(datos, "ingreso"), 0);
+});
+
+test("egresosPorCategoria excluye el ajuste de tarjeta", () => {
+  const datos = [
+    t("2026-06-03", "egreso", 45230, "Comida"),
+    t("2026-06-30", "egreso", -17197.39, "Ajustes tarjeta"),
+  ];
+  // La torta muestra sólo el consumo, sin la porción negativa del ajuste.
+  assert.deepEqual(egresosPorCategoria(datos), [{ categoria: "Comida", monto: 45230 }]);
+});
+
+test("egresosPorCategoria excluye una categoría que quedó en cero o negativa", () => {
+  // Defensa por si alguien más carga montos que se cancelan.
+  const datos = [
+    t("2026-06-03", "egreso", 100, "Comida"),
+    t("2026-06-04", "egreso", 50, "Salud"),
+    t("2026-06-05", "egreso", -50, "Salud"),
+  ];
+  assert.deepEqual(egresosPorCategoria(datos), [{ categoria: "Comida", monto: 100 }]);
+});
+
+test("totalEgresosPorCategoria suma sólo lo que va a la torta", () => {
+  const datos = [
+    t("2026-06-03", "egreso", 45230, "Comida"),
+    t("2026-06-04", "egreso", 8400, "Entretenimiento"),
+    t("2026-06-30", "egreso", -17197.39, "Ajustes tarjeta"),
+  ];
+  // Excluye el ajuste: 45230 + 8400.
+  assert.equal(totalEgresosPorCategoria(datos), 53630);
 });
 
 test("egresosPorCategoria agrupa, ordena y descarta ingresos", () => {

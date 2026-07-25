@@ -1,9 +1,8 @@
 /**
- * Categorías disponibles en el formulario.
- * Para agregar/sacar una, editá sólo esta lista: el selector, la validación
- * del server action y los colores de la lista salen todos de acá.
+ * Categorías de consumo: las que el usuario elige y las que la IA puede sugerir
+ * para un gasto real. Para agregar/sacar una, editá sólo esta lista.
  */
-export const CATEGORIAS = [
+export const CATEGORIAS_CONSUMO = [
   "Comida",
   "Transporte",
   "Suscripciones",
@@ -13,6 +12,17 @@ export const CATEGORIAS = [
   "Salud",
   "Otros",
 ] as const;
+
+/**
+ * Categoría del ítem que netea impuestos y percepciones al importar un resumen.
+ * Va aparte para no mezclarse con los gastos reales: no es una categoría de
+ * consumo, es un ajuste de reconciliación con el resumen. Se excluye de la
+ * torta de egresos por categoría (ver `agregados.ts`).
+ */
+export const CATEGORIA_AJUSTES = "Ajustes tarjeta";
+
+/** Todas las categorías válidas para guardar. Consumos + el ajuste. */
+export const CATEGORIAS = [...CATEGORIAS_CONSUMO, CATEGORIA_AJUSTES] as const;
 
 export type Categoria = (typeof CATEGORIAS)[number];
 
@@ -32,8 +42,9 @@ export const CUENTAS_SUGERIDAS = ["Efectivo", "Tarjeta", "Débito", "Transferenc
  * Color de cada categoría en los gráficos. El color sigue a la categoría, no a
  * su posición en el ranking: si un mes Comida deja de ser la más grande, sigue
  * siendo azul. Los valores están en globals.css (`.viz`), que resuelve claro y
- * oscuro. Si agregás una categoría, asignale el slot libre que sigue: los 8
- * tonos son un orden validado y no hay que inventar uno nuevo.
+ * oscuro. Los 8 tonos de consumo son un orden validado para daltonismo; no hay
+ * que inventar un noveno. "Ajustes tarjeta" usa el neutro porque no se dibuja
+ * en la torta.
  */
 export const COLOR_CATEGORIA: Record<Categoria, string> = {
   Comida: "var(--viz-1)",
@@ -44,6 +55,7 @@ export const COLOR_CATEGORIA: Record<Categoria, string> = {
   Entretenimiento: "var(--viz-6)",
   Salud: "var(--viz-7)",
   Otros: "var(--viz-8)",
+  [CATEGORIA_AJUSTES]: "var(--viz-resto)",
 };
 
 /** Color para categorías viejas o desconocidas que no están en la lista. */

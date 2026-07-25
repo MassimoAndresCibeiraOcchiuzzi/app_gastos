@@ -70,6 +70,24 @@ test("transaccionesACSV usa punto decimal y siempre 2 decimales", () => {
   assert.ok(filas[1].includes(",0.50,"));
 });
 
+test("transaccionesACSV exporta un egreso negativo sin romperse", () => {
+  // El ajuste de impuestos con neto a favor. El "-" al principio NO es fórmula,
+  // así que la celda no se toca y el número queda legible en cualquier lector.
+  const csv = transaccionesACSV([
+    t({
+      descripcion: "Ajustes impuestos y percepciones tarjeta",
+      monto: -17197.39,
+      categoria: "Ajustes tarjeta",
+      cuenta: null,
+    }),
+  ]);
+  const fila = csv.split("\r\n")[1];
+  assert.equal(
+    fila,
+    "2026-07-23,Ajustes impuestos y percepciones tarjeta,-17197.39,egreso,Ajustes tarjeta,,manual",
+  );
+});
+
 test("transaccionesACSV deja vacías las columnas nulas", () => {
   const csv = transaccionesACSV([t({ categoria: null, cuenta: null })]);
   const fila = csv.split("\r\n")[1];

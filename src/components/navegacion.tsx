@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const SECCIONES = [
   { href: "/", etiqueta: "Movimientos" },
   { href: "/dashboard", etiqueta: "Dashboard" },
+  { href: "/importar", etiqueta: "Importar" },
 ];
 
 /** Tabs entre las dos pantallas, manteniendo el mes que estás mirando. */

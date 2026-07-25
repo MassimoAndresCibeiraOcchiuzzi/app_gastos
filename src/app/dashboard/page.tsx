@@ -10,7 +10,7 @@ import TortaEgresos from "@/components/graficos/torta-egresos";
 import {
   agruparCola,
   egresosPorCategoria,
-  totalPorTipo,
+  totalEgresosPorCategoria,
   totalesPorMes,
 } from "@/lib/agregados";
 import { COLOR_SIN_CATEGORIA, colorDeCategoria } from "@/lib/categorias";
@@ -53,8 +53,11 @@ export default async function Dashboard({
   });
 
   const delMes = transacciones.filter((t) => t.fecha.slice(0, 7) === mes);
-  const totalEgresos = totalPorTipo(delMes, "egreso");
   const porCategoria = egresosPorCategoria(delMes);
+  // El total de la torta es la suma de sus porciones (consumos), no el egreso
+  // total del mes: ese incluye el ajuste de impuestos, que puede ser negativo y
+  // no se dibuja. Así los porcentajes suman 100%.
+  const totalEgresos = totalEgresosPorCategoria(delMes);
 
   const porciones = agruparCola(porCategoria, MAX_PORCIONES).visibles.map(
     (c) => ({

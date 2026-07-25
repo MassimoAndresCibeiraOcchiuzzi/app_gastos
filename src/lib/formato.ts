@@ -101,9 +101,14 @@ export function esMesValido(valor: unknown): valor is string {
   return mes >= 1 && mes <= 12;
 }
 
+/** "2026-07" -> "2026-07-01" */
+export function primerDia(mes: string): string {
+  return `${mes}-01`;
+}
+
 /** Rango [desde, hasta) que cubre el mes. `hasta` es el día 1 del mes siguiente. */
 export function rangoMes(mes: string): { desde: string; hasta: string } {
-  return { desde: `${mes}-01`, hasta: `${sumarMeses(mes, 1)}-01` };
+  return { desde: primerDia(mes), hasta: primerDia(sumarMeses(mes, 1)) };
 }
 
 export function sumarMeses(mes: string, delta: number): string {
@@ -140,6 +145,18 @@ const MESES_CORTOS = [
 export function formatearFechaCorta(fecha: string): string {
   const [, mes, dia] = fecha.split("-");
   return `${dia} ${MESES_CORTOS[Number(mes) - 1]}`;
+}
+
+/**
+ * "2026-06-03" -> "03/06/2026". Con año, porque se usa para mostrar la fecha
+ * de compra original de un resumen, que puede ser de hace varios meses.
+ * Si no es una fecha ISO, devuelve lo que vino: es dato de referencia, no
+ * queremos inventar nada ni romper la pantalla.
+ */
+export function formatearFechaNumerica(fecha: string): string {
+  if (!esFechaISO(fecha)) return fecha;
+  const [anio, mes, dia] = fecha.split("-");
+  return `${dia}/${mes}/${anio}`;
 }
 
 /**

@@ -1,3 +1,4 @@
+import { CATEGORIA_AJUSTES } from "./categorias";
 import type { Transaccion } from "./types";
 
 /** Redondea a centavos: evita los 0.30000000000000004 de sumar en float. */
@@ -25,6 +26,11 @@ export function totalPorTipo(
 /**
  * Egresos agrupados por categoría, de mayor a menor.
  * Las filas sin categoría caen en "Sin categoría" en vez de desaparecer.
+ *
+ * Se excluye "Ajustes tarjeta": no es un gasto real sino la reconciliación
+ * neteada de impuestos, y su monto puede ser negativo — una porción negativa
+ * en una torta no significa nada. Los egresos con monto ≤ 0 tampoco entran, por
+ * las mismas razones.
  */
 export function egresosPorCategoria(
   transacciones: Transaccion[],
@@ -33,13 +39,22 @@ export function egresosPorCategoria(
 
   for (const t of transacciones) {
     if (t.tipo !== "egreso") continue;
+    if (t.categoria === CATEGORIA_AJUSTES) continue;
     const clave = t.categoria ?? "Sin categoría";
     totales.set(clave, (totales.get(clave) ?? 0) + t.monto);
   }
 
   return [...totales.entries()]
     .map(([categoria, monto]) => ({ categoria, monto: aCentavos(monto) }))
+    .filter((c) => c.monto > 0)
     .sort((a, b) => b.monto - a.monto || a.categoria.localeCompare(b.categoria));
+}
+
+/** Suma los egresos que sí van a la torta (excluye ajustes y no-positivos). */
+export function totalEgresosPorCategoria(transacciones: Transaccion[]): number {
+  return aCentavos(
+    egresosPorCategoria(transacciones).reduce((acc, c) => acc + c.monto, 0),
+  );
 }
 
 /**
