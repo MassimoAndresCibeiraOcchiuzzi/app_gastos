@@ -15,10 +15,23 @@ import {
   ultimosMeses,
   primerDia,
   formatearFechaNumerica,
+  redondearCentavos,
+  formatearUSD,
 } from "../src/lib/formato.ts";
 
 // Espacio angosto que usa Intl entre el símbolo y el número.
 const normalizar = (s) => s.replace(/ | /g, " ");
+
+test("redondearCentavos corta los errores de punto flotante", () => {
+  assert.equal(redondearCentavos(0.1 + 0.2), 0.3);
+  assert.equal(redondearCentavos(1234.5678), 1234.57);
+  assert.equal(redondearCentavos(-17197.394), -17197.39);
+});
+
+test("formatearUSD antepone U$S y usa formato es-AR", () => {
+  assert.equal(normalizar(formatearUSD(1234.5)), "U$S 1.234,50");
+  assert.equal(normalizar(formatearUSD(1000)), "U$S 1.000,00");
+});
 
 test("parsearMonto acepta notación simple", () => {
   assert.equal(parsearMonto("1234"), 1234);

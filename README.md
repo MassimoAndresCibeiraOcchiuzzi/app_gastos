@@ -1,8 +1,18 @@
 # app_gastos
 
-Este repositorio es para la aplicacion que voy a crear para controlar mis gastos.
-
 PWA de control de gastos personales — **Next.js 16 (App Router) + TypeScript + Tailwind 4 + Supabase**.
+
+Registrás ingresos y egresos (a mano o importando el PDF de un resumen de
+tarjeta/banco), los ves por mes con su resumen y un dashboard de gráficos, y
+podés exportar todo a CSV. Cada usuario entra con un magic link por email y sólo
+ve sus propios datos (Row Level Security en Supabase). Es instalable como app en
+el celular.
+
+**Cómo está organizado este README:** primero el estado por fases y las notas de
+diseño de las partes que no son obvias (importación de PDF, checksum, impuestos);
+después el [modelo de datos](#modelo-de-datos), la [puesta en
+marcha](#puesta-en-marcha), la [estructura de carpetas](#estructura-relevante) y
+una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funcionalidad-nueva).
 
 ## Estado
 
@@ -224,6 +234,58 @@ Los colores están en `globals.css` bajo `.viz` y se mapean a cada categoría en
 para daltonismo: el color sigue a la categoría, no a su puesto en el ranking.
 Si agregás una categoría, dale el slot que sigue en vez de inventar un color.
 
+## Modelo de datos
+
+Dos tablas en Supabase, las dos con **Row Level Security**: cada política filtra
+por `usuario_id = auth.uid()`, así que un usuario nunca ve ni toca filas de otro,
+aun si la app tuviera un bug. El SQL completo (tablas, índices y políticas) está
+en [`supabase/schema.sql`](supabase/schema.sql) y
+[`supabase/categorias.sql`](supabase/categorias.sql), y es idempotente.
+
+### `transacciones`
+
+El corazón de la app: un ingreso o egreso por fila.
+
+| Columna | Tipo | Para qué |
+| --- | --- | --- |
+| `id` | `uuid` | Clave primaria (autogenerada). |
+| `fecha` | `date` | Fecha imputada. En un alta manual es la que elegís; en un import es el **día 1 del mes en que pagás el resumen** (ver [Qué fecha se guarda](#qué-fecha-se-guarda)). |
+| `descripcion` | `text` | Texto libre: el comercio o el concepto. |
+| `monto` | `numeric(14,2)` | Importe. Normalmente positivo; el único negativo es el ítem de ajuste de impuestos. |
+| `tipo` | `text` | `'ingreso'` o `'egreso'` (con `check`). |
+| `categoria` | `text` (nullable) | Nombre de la categoría **como texto**, no un id. Puede ser una del sistema, una personalizada, o `null`. |
+| `cuenta` | `text` (nullable) | De qué cuenta/tarjeta salió (texto libre con sugerencias). |
+| `origen` | `text` | `'manual'` o `'pdf'` (con `check`), para saber cómo entró. |
+| `usuario_id` | `uuid` | Dueño de la fila. FK a `auth.users`, `on delete cascade`. Default `auth.uid()`. |
+| `created_at` | `timestamptz` | Cuándo se creó; desempata el orden dentro de un mismo día. |
+
+Índice `(usuario_id, fecha desc)` para el listado típico (mis transacciones, más
+recientes primero).
+
+### `categorias`
+
+Sólo las categorías **personalizadas** de cada usuario. Las 8 del sistema no
+están acá: viven en el código (`CATEGORIAS_CONSUMO` en `src/lib/categorias.ts`),
+son iguales para todos y están versionadas, así que no hace falta sembrarlas por
+usuario.
+
+| Columna | Tipo | Para qué |
+| --- | --- | --- |
+| `id` | `uuid` | Clave primaria (autogenerada). |
+| `nombre` | `text` | Nombre de la categoría, 1–40 caracteres (con `check`). |
+| `usuario_id` | `uuid` | Dueño. FK a `auth.users`, `on delete cascade`. Default `auth.uid()`. |
+| `created_at` | `timestamptz` | Cuándo se creó. |
+
+Índice único `(usuario_id, lower(trim(nombre)))`: no podés tener dos categorías
+que difieran sólo en mayúsculas o espacios de los bordes.
+
+> **Por qué la categoría se guarda como texto y no como FK a `categorias`:** así
+> el sistema y lo personalizado conviven sin dos columnas, la torta agrupa por el
+> nombre y toma cualquier categoría nueva sin cambios de código, y borrar una
+> categoría no puede dejar transacciones colgadas. El precio es que una categoría
+> personalizada sólo se puede borrar si no la usa ninguna transacción — lo
+> verifica `eliminarCategoria` contando filas antes de borrar.
+
 ## Puesta en marcha
 
 ### 1. Variables de entorno
@@ -291,6 +353,58 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `public/sw.js` | Service worker (fallback offline) |
 | `supabase/schema.sql` | Tabla `transacciones` + políticas RLS |
 | `supabase/categorias.sql` | Tabla `categorias` (personalizadas) + políticas RLS |
+
+## Cómo agregar una funcionalidad nueva
+
+Tres recorridos habituales, con el orden en que conviene tocar las cosas. La
+regla general: **la lógica pura vive en `src/lib/` y tiene tests; los componentes
+sólo la usan.** Si algo se puede testear sin un navegador ni Supabase, va en
+`lib`.
+
+### Agregar un campo a `transacciones`
+
+Ejemplo: una nota opcional por transacción.
+
+1. **Base:** agregá la columna en [`supabase/schema.sql`](supabase/schema.sql)
+   (`alter table ... add column if not exists`) y corré el SQL en Supabase.
+2. **Tipo:** sumá el campo a `Transaccion` en `src/lib/types.ts`.
+3. **Validación:** contemplalo en `EntradaTransaccion` y `validarTransaccion`
+   (`src/lib/validacion.ts`) — es la única fuente de verdad de qué es válido, la
+   comparten el alta manual y el import.
+4. **Alta manual:** agregá el input en `src/components/formulario-transaccion.tsx`
+   (acordate del `name` para que lo tome el `FormData`).
+5. **Persistencia:** revisá que la server action lo pase al insert
+   (`src/app/actions/transacciones.ts`) y, si querés que salga en el export,
+   agregalo a `COLUMNAS` en `src/lib/csv.ts`.
+6. **Tests:** actualizá `tests/validacion.test.mjs`.
+
+### Agregar una categoría del sistema
+
+Las del sistema son las que ve todo el mundo y las que la IA puede sugerir. Todo
+está en `src/lib/categorias.ts`:
+
+1. Agregá el nombre a `CATEGORIAS_CONSUMO`.
+2. Dale su color en `COLOR_CATEGORIA`: usá **el slot que sigue** (`--viz-1..8` en
+   `globals.css`), no inventes un tono nuevo — los 8 están validados para
+   daltonismo. Si ya usaste los 8, hay que decidir antes de sumar un noveno.
+3. Listo: el selector, el enum del esquema de extracción (`ESQUEMA_EXTRACCION`) y
+   la torta la toman solas, porque todos parten de esa lista.
+
+> No confundir con las categorías **personalizadas**: esas las crea cada usuario
+> desde el selector y van a la tabla `categorias`, sin tocar código.
+
+### Agregar un gráfico al dashboard
+
+1. **Agregado:** si necesitás una forma nueva de los datos, agregá la función en
+   `src/lib/agregados.ts` (recibe `Transaccion[]`, devuelve algo listo para
+   graficar) y testeala en `tests/agregados.test.mjs`. Reutilizá
+   `redondearCentavos` de `src/lib/formato.ts` para cerrar los totales.
+2. **Componente:** creá el gráfico en `src/components/graficos/` con **recharts**
+   y `ResponsiveContainer`. Para los colores usá `colorDeCategoria` (no
+   hardcodees), así una categoría personalizada también recibe su tono.
+3. **Página:** el dashboard (`src/app/dashboard/page.tsx`) es un Server Component:
+   trae las transacciones, llama a tu función de agregado y le pasa el resultado
+   ya calculado al componente cliente del gráfico.
 
 ## Nota sobre el magic link
 

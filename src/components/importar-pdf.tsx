@@ -10,8 +10,10 @@ import {
   esMesValido,
   formatearARS,
   formatearFechaNumerica,
+  formatearUSD,
   nombreMes,
   primerDia,
+  redondearCentavos,
 } from "@/lib/formato";
 import {
   aCamposGuardables,
@@ -656,7 +658,7 @@ function neto(filas: Fila[]): number {
     const monto = Number(f.monto.replace(",", ".")) || 0;
     return acc + (f.tipo === "ingreso" ? monto : -monto);
   }, 0);
-  return Math.round(total * 100) / 100;
+  return redondearCentavos(total);
 }
 
 /**
@@ -699,18 +701,15 @@ function Checksum({
         </p>
         {totalResumen.dolares !== null && (
           <p className="mt-1 opacity-50">
-            El resumen también debita U$S{" "}
-            {totalResumen.dolares.toLocaleString("es-AR", {
-              minimumFractionDigits: 2,
-            })}
-            , que no se importan.
+            El resumen también debita {formatearUSD(totalResumen.dolares)}, que
+            no se importan.
           </p>
         )}
       </div>
     );
   }
 
-  const diferencia = Math.round((totalImportado - esperado) * 100) / 100;
+  const diferencia = redondearCentavos(totalImportado - esperado);
   const coincide = Math.abs(diferencia) <= TOLERANCIA;
 
   return (
@@ -754,12 +753,8 @@ function Checksum({
 
       {totalResumen.dolares !== null && (
         <p className="mt-2 opacity-50">
-          El resumen también debita U$S{" "}
-          {totalResumen.dolares.toLocaleString("es-AR", {
-            minimumFractionDigits: 2,
-          })}
-          . Los consumos en dólares no se importan; cargalos a mano si los
-          querés.
+          El resumen también debita {formatearUSD(totalResumen.dolares)}. Los
+          consumos en dólares no se importan; cargalos a mano si los querés.
         </p>
       )}
     </div>

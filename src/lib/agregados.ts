@@ -1,8 +1,6 @@
 import { CATEGORIA_AJUSTES } from "./categorias";
+import { redondearCentavos } from "./formato";
 import type { Transaccion } from "./types";
-
-/** Redondea a centavos: evita los 0.30000000000000004 de sumar en float. */
-const aCentavos = (n: number) => Math.round(n * 100) / 100;
 
 export type TotalCategoria = {
   categoria: string;
@@ -16,7 +14,7 @@ export function totalPorTipo(
   transacciones: Transaccion[],
   tipo: Transaccion["tipo"],
 ): number {
-  return aCentavos(
+  return redondearCentavos(
     transacciones
       .filter((t) => t.tipo === tipo)
       .reduce((acc, t) => acc + t.monto, 0),
@@ -45,14 +43,14 @@ export function egresosPorCategoria(
   }
 
   return [...totales.entries()]
-    .map(([categoria, monto]) => ({ categoria, monto: aCentavos(monto) }))
+    .map(([categoria, monto]) => ({ categoria, monto: redondearCentavos(monto) }))
     .filter((c) => c.monto > 0)
     .sort((a, b) => b.monto - a.monto || a.categoria.localeCompare(b.categoria));
 }
 
 /** Suma los egresos que sí van a la torta (excluye ajustes y no-positivos). */
 export function totalEgresosPorCategoria(transacciones: Transaccion[]): number {
-  return aCentavos(
+  return redondearCentavos(
     egresosPorCategoria(transacciones).reduce((acc, c) => acc + c.monto, 0),
   );
 }
@@ -70,7 +68,7 @@ export function agruparCola(
 
   const visibles = totales.slice(0, maximo - 1);
   const cola = totales.slice(maximo - 1);
-  const monto = aCentavos(cola.reduce((acc, c) => acc + c.monto, 0));
+  const monto = redondearCentavos(cola.reduce((acc, c) => acc + c.monto, 0));
 
   return {
     visibles: [
@@ -102,6 +100,6 @@ export function totalesPorMes(
 
   return meses.map((mes) => {
     const { ingresos, egresos } = acumulado.get(mes)!;
-    return { mes, ingresos: aCentavos(ingresos), egresos: aCentavos(egresos) };
+    return { mes, ingresos: redondearCentavos(ingresos), egresos: redondearCentavos(egresos) };
   });
 }

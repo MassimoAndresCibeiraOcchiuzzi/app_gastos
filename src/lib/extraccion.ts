@@ -3,6 +3,7 @@ import {
   CATEGORIA_POR_DEFECTO,
   esCategoriaValida,
 } from "./categorias";
+import { redondearCentavos } from "./formato";
 
 /** Lo que le pedimos a Claude por cada consumo del resumen. */
 export type ItemExtraido = {
@@ -256,8 +257,6 @@ export type LineaImpuesto = { descripcion: string; monto: number };
  */
 export type Ajuste = { neto: number; lineas: LineaImpuesto[] };
 
-const aCentavos = (n: number) => Math.round(n * 100) / 100;
-
 /** El aporte de una línea al neto: los impuestos suman, las devoluciones restan. */
 function aporteAlNeto(item: ItemExtraido): number {
   const magnitud = Math.abs(item.monto);
@@ -307,7 +306,7 @@ export function clasificarItems(
     consumos.push(item);
   }
 
-  const neto = aCentavos(lineas.reduce((acc, l) => acc + l.monto, 0));
+  const neto = redondearCentavos(lineas.reduce((acc, l) => acc + l.monto, 0));
   // Si no hubo impuestos, o netean a cero, no hay ajuste que cargar: sin él el
   // total ya cuadra (los impuestos se cancelan entre sí).
   const ajuste = lineas.length > 0 && neto !== 0 ? { neto, lineas } : null;

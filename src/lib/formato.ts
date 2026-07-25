@@ -6,6 +6,15 @@ const RE_MES = /^\d{4}-\d{2}$/;
 
 // ---------------------------------------------------------------- dinero
 
+/**
+ * Redondea a centavos. Sumar montos en punto flotante arrastra errores
+ * (0.1 + 0.2 = 0.30000000000000004); cada total que se muestra o se compara
+ * pasa por acá para cerrar en dos decimales exactos.
+ */
+export function redondearCentavos(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 const FORMATO_ARS = new Intl.NumberFormat("es-AR", {
   style: "currency",
   currency: "ARS",
@@ -22,6 +31,14 @@ export function formatearARS(monto: number): string {
 export function formatearARSConSigno(monto: number): string {
   const signo = monto > 0 ? "+" : monto < 0 ? "−" : "";
   return `${signo}${FORMATO_ARS.format(Math.abs(monto))}`;
+}
+
+/**
+ * 1234.5 -> "U$S 1.234,50". Los consumos en dólares no se importan, pero el
+ * total del resumen sí puede venir en dólares y se muestra como referencia.
+ */
+export function formatearUSD(monto: number): string {
+  return `U$S ${monto.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
 }
 
 /** Máximo que entra en numeric(14,2). */
@@ -66,7 +83,7 @@ export function parsearMonto(entrada: string): number | null {
   const numero = Number(normalizado);
   if (!Number.isFinite(numero)) return null;
 
-  return Math.round(numero * 100) / 100;
+  return redondearCentavos(numero);
 }
 
 // ---------------------------------------------------------------- fechas
