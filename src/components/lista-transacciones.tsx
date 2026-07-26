@@ -39,9 +39,7 @@ export default function ListaTransacciones({
 
             <div
               className={`shrink-0 text-sm font-medium tabular-nums ${
-                esIngreso
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-rose-600 dark:text-rose-400"
+                esIngreso ? "text-ingreso" : "text-egreso"
               }`}
             >
               {formatearARSConSigno(esIngreso ? t.monto : -t.monto)}

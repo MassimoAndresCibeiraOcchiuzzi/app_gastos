@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { MAX_CATEGORIA } from "@/lib/categorias";
-
-const INPUT =
-  "w-full rounded-lg border border-black/15 bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50";
+import {
+  CAMPO,
+  CAMPO_COMPACTO,
+  CAMPO_SELECT,
+  CAMPO_SELECT_COMPACTO,
+} from "@/lib/ui";
 
 /**
  * Valor centinela: elegir esta opción abre el alta de una categoría nueva.
@@ -30,6 +33,7 @@ export default function SelectorCategoria({
   onChange,
   onCrear,
   className = "",
+  compacto = false,
 }: {
   id?: string;
   value: string;
@@ -37,11 +41,17 @@ export default function SelectorCategoria({
   onChange: (categoria: string) => void;
   onCrear: (nombre: string) => Promise<{ ok: boolean; error?: string }>;
   className?: string;
+  /** Filas densas (tabla de revisión del import): campos más chicos. */
+  compacto?: boolean;
 }) {
   const [creando, setCreando] = useState(false);
   const [nombre, setNombre] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  // Mismo estilo que el resto de los campos; el select con fondo opaco para que
+  // el desplegable sea legible en oscuro. `compacto` lo usa la tabla de import.
+  const INPUT = compacto ? CAMPO_COMPACTO : CAMPO;
+  const SELECT = compacto ? CAMPO_SELECT_COMPACTO : CAMPO_SELECT;
 
   function abrirAlta() {
     setNombre("");
@@ -71,7 +81,7 @@ export default function SelectorCategoria({
 
   if (creando) {
     return (
-      <div className={className}>
+      <div className={`animar-entrada ${className}`}>
         <div className="flex gap-1.5">
           <input
             autoFocus
@@ -96,7 +106,7 @@ export default function SelectorCategoria({
             type="button"
             onClick={confirmar}
             disabled={ocupado}
-            className="shrink-0 rounded-lg bg-foreground px-2.5 text-sm font-medium text-background disabled:opacity-50"
+            className="shrink-0 rounded-lg bg-foreground px-2.5 text-sm font-medium text-background transition active:scale-95 disabled:opacity-50 disabled:active:scale-100"
           >
             {ocupado ? "…" : "Crear"}
           </button>
@@ -127,7 +137,7 @@ export default function SelectorCategoria({
         if (e.target.value === NUEVA) abrirAlta();
         else onChange(e.target.value);
       }}
-      className={`${INPUT} ${className}`}
+      className={`${SELECT} ${className}`}
     >
       {/* Si el valor actual no está en la lista (categoría vieja borrada), lo
           mostramos igual para no perderlo. */}

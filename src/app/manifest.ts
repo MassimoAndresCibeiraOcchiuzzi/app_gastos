@@ -11,8 +11,9 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#0a0a0a",
-    theme_color: "#0a0a0a",
+    // Splash de la PWA: el fondo violeta oscuro de la identidad en modo oscuro.
+    background_color: "#16121c",
+    theme_color: "#16121c",
     lang: "es-AR",
     icons: [
       {

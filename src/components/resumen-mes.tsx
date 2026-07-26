@@ -17,21 +17,17 @@ export default function ResumenMes({
       <Tarjeta
         etiqueta="Ingresos"
         valor={formatearARS(ingresos)}
-        clase="text-emerald-600 dark:text-emerald-400"
+        clase="text-ingreso"
       />
       <Tarjeta
         etiqueta="Egresos"
         valor={formatearARS(egresos)}
-        clase="text-rose-600 dark:text-rose-400"
+        clase="text-egreso"
       />
       <Tarjeta
         etiqueta="Balance"
         valor={formatearARS(balance)}
-        clase={
-          balance < 0
-            ? "text-rose-600 dark:text-rose-400"
-            : "text-emerald-600 dark:text-emerald-400"
-        }
+        clase={balance < 0 ? "text-egreso" : "text-ingreso"}
         destacada
       />
     </section>
@@ -56,7 +52,9 @@ function Tarjeta({
       }`}
     >
       <div className="text-xs opacity-60">{etiqueta}</div>
-      <div className={`mt-1 text-lg font-semibold tabular-nums ${clase}`}>
+      <div
+        className={`fuente-display mt-1 text-lg font-semibold tabular-nums ${clase}`}
+      >
         {valor}
       </div>
     </div>

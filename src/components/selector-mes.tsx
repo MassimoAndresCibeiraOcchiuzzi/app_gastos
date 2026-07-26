@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { esMesValido, nombreMes, sumarMeses } from "@/lib/formato";
 
 const FLECHA =
-  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black/10 text-lg leading-none transition-colors hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10";
+  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black/15 text-lg leading-none transition-colors hover:bg-black/5 active:scale-95 dark:border-white/20 dark:hover:bg-white/10";
 
 export default function SelectorMes({
   mes,
@@ -58,7 +58,7 @@ export default function SelectorMes({
       {mes !== mesDeHoy && (
         <Link
           href="/"
-          className="shrink-0 rounded-lg border border-black/10 px-3 py-1.5 text-xs transition-colors hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+          className="shrink-0 rounded-lg border border-black/15 px-3 py-1.5 text-xs transition-colors hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
         >
           Hoy
         </Link>

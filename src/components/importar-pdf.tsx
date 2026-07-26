@@ -5,6 +5,7 @@ import { importarTransacciones } from "@/app/actions/transacciones";
 import { CATEGORIA_AJUSTES } from "@/lib/categorias";
 import SelectorCategoria from "@/components/selector-categoria";
 import { useCategorias } from "@/components/use-categorias";
+import { CAMPO_COMPACTO, CAMPO_SELECT_COMPACTO } from "@/lib/ui";
 import type { CategoriaUsuario } from "@/lib/types";
 import {
   esMesValido,
@@ -27,8 +28,7 @@ import {
 } from "@/lib/extraccion";
 import type { EntradaTransaccion } from "@/lib/validacion";
 
-const INPUT =
-  "w-full rounded-lg border border-black/15 bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50";
+const INPUT = CAMPO_COMPACTO;
 const ETIQUETA = "text-[11px] font-medium opacity-60";
 
 type Fila = {
@@ -263,7 +263,7 @@ export default function ImportarPdf({
         <button
           type="button"
           onClick={empezarDeNuevo}
-          className="mt-4 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background"
+          className="mt-4 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition hover:opacity-90 active:scale-[.99]"
         >
           Importar otro resumen
         </button>
@@ -279,7 +279,7 @@ export default function ImportarPdf({
           className="flex flex-col gap-4 rounded-xl border border-black/10 p-4 dark:border-white/15"
         >
           <div>
-            <label htmlFor="mes-resumen" className="text-sm font-medium">
+            <label htmlFor="mes-resumen" className="block text-sm font-medium">
               Mes del resumen
             </label>
             <input
@@ -298,7 +298,7 @@ export default function ImportarPdf({
           </div>
 
           <div>
-            <label htmlFor="archivo" className="text-sm font-medium">
+            <label htmlFor="archivo" className="block text-sm font-medium">
               Resumen en PDF
             </label>
             <input
@@ -338,7 +338,7 @@ export default function ImportarPdf({
           <button
             type="submit"
             disabled={estado === "analizando"}
-            className="rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition hover:opacity-90 active:scale-[.99] disabled:opacity-50 disabled:active:scale-100"
           >
             {estado === "analizando" ? "Analizando…" : "Analizar PDF"}
           </button>
@@ -570,7 +570,7 @@ export default function ImportarPdf({
                       onChange={(e) =>
                         editar(fila.id, "tipo", e.target.value as Fila["tipo"])
                       }
-                      className={`${INPUT} mt-0.5 disabled:opacity-60`}
+                      className={`${CAMPO_SELECT_COMPACTO} mt-0.5 disabled:opacity-60`}
                     >
                       <option value="egreso">Egreso</option>
                       <option value="ingreso">Ingreso</option>
@@ -596,6 +596,7 @@ export default function ImportarPdf({
                         onChange={(c) => editar(fila.id, "categoria", c)}
                         onCrear={crearCategoria}
                         className="mt-0.5"
+                        compacto
                       />
                     )}
                   </div>
@@ -629,7 +630,7 @@ export default function ImportarPdf({
               disabled={
                 estado === "guardando" || incluidas.length === 0 || !mesOk
               }
-              className="rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition hover:opacity-90 active:scale-[.99] disabled:opacity-50 disabled:active:scale-100"
             >
               {estado === "guardando"
                 ? "Importando…"

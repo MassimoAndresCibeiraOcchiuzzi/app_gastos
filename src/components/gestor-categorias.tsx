@@ -30,11 +30,14 @@ export default function GestorCategorias({
 
   return (
     <>
+      {/* Mismo alto/padding/borde que los inputs y selects del formulario
+          (px-3 py-2, border /15), para que se lea como un control más. */}
       <button
         type="button"
         onClick={() => setAbierto(true)}
-        className="rounded-lg border border-black/15 px-3 py-1.5 text-sm transition-colors hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm transition-colors hover:bg-black/5 active:scale-[.98] dark:border-white/20 dark:hover:bg-white/10"
       >
+        <IconoEtiqueta />
         Categorías
       </button>
 
@@ -143,12 +146,12 @@ function FilaCategoria({
 
       {/* Confirmación propia de la app (nada de window.confirm nativo). */}
       {fase === "confirmar" && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-black/5 px-2.5 py-2 text-xs dark:bg-white/10">
+        <div className="animar-entrada flex flex-wrap items-center gap-2 rounded-lg bg-black/5 px-2.5 py-2 text-xs dark:bg-white/10">
           <span className="flex-1">¿Eliminar “{categoria.nombre}”?</span>
           <button
             type="button"
             onClick={borrar}
-            className="rounded-lg bg-rose-600 px-2.5 py-1 font-medium text-white hover:bg-rose-700"
+            className="rounded-lg bg-rose-600 px-2.5 py-1 font-medium text-white transition hover:bg-rose-700 active:scale-95"
           >
             Sí, eliminar
           </button>
@@ -169,12 +172,30 @@ function FilaCategoria({
       {fase === "bloqueada" && mensaje && (
         <p
           role="alert"
-          className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-400"
+          className="animar-entrada rounded-lg border border-amber-500/40 bg-amber-500/5 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-400"
         >
           {mensaje}
         </p>
       )}
     </li>
+  );
+}
+
+function IconoEtiqueta() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      className="h-4 w-4 opacity-70"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" />
+      <circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
   );
 }
 

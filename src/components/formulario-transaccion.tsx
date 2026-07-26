@@ -5,9 +5,9 @@ import { CATEGORIA_POR_DEFECTO, CUENTAS_SUGERIDAS } from "@/lib/categorias";
 import { crearTransaccion } from "@/app/actions/transacciones";
 import { ESTADO_INICIAL, type EstadoFormulario } from "@/lib/formulario";
 import SelectorCategoria from "@/components/selector-categoria";
+import { CAMPO } from "@/lib/ui";
 
-const INPUT =
-  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50";
+const INPUT = CAMPO;
 const ETIQUETA = "text-xs font-medium opacity-70";
 
 type Valores = {
@@ -204,7 +204,7 @@ export default function FormularioTransaccion({
       <button
         type="submit"
         disabled={pendiente}
-        className="mt-1 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+        className="mt-1 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition hover:opacity-90 active:scale-[.99] disabled:opacity-50 disabled:active:scale-100"
       >
         {pendiente ? "Guardando…" : "Guardar"}
       </button>

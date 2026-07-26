@@ -80,13 +80,13 @@ export default function LoginForm() {
       <button
         type="submit"
         disabled={estado === "enviando"}
-        className="rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+        className="rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition hover:opacity-90 active:scale-[.99] disabled:opacity-50 disabled:active:scale-100"
       >
         {estado === "enviando" ? "Enviando…" : "Enviarme el link"}
       </button>
 
       {estado === "error" && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">
           {mensajeError}
         </p>
       )}

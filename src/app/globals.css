@@ -1,28 +1,189 @@
 @import "tailwindcss";
 
 :root {
+  /* color-scheme: que los controles nativos (select, date, month, file,
+     checkbox, scrollbars) sigan el tema. Sin esto, en modo oscuro el
+     desplegable de un <select> sale claro con texto claro: ilegible. */
+  color-scheme: light dark;
+
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Superficie de tarjetas/inputs y bordes, como tokens para no repetir
+     border-black/10 disperso por los componentes. */
+  --card: #ffffff;
+  --borde-suave: rgba(0, 0, 0, 0.1); /* tarjetas, listas, nav */
+  --borde-control: rgba(0, 0, 0, 0.15); /* inputs y botones con borde */
+
+  /* Semánticos ingreso/egreso. Tonos elegidos para pasar contraste AA (≥4.5)
+     con texto chico sobre el fondo: el verde/rojo de los gráficos es más
+     saturado y no llega en 14px. Mismo hue que los gráficos, distinto paso. */
+  --ingreso: #047857;
+  --egreso: #be123c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Paleta "ciruela": oscuro con tinte violeta/malva, sin negro puro.
+       Le da carácter sin caer en el gris azulado corporativo. */
+    --background: #16121c;
+    --foreground: #ebe6f2;
+
+    --card: #201a29;
+    --borde-suave: rgba(240, 235, 255, 0.14);
+    --borde-control: rgba(240, 235, 255, 0.22);
+
+    --ingreso: #34d399;
+    --egreso: #fb7185;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-card: var(--card);
+  --color-ingreso: var(--ingreso);
+  --color-egreso: var(--egreso);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Cuerpo en DM Sans (cargada en layout.tsx). */
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Títulos y números destacados en Space Grotesk: le da el carácter geométrico
+   sin sacrificar la legibilidad del cuerpo. `tracking` apenas cerrado, que es
+   como respira mejor esta fuente en títulos. */
+h1,
+h2,
+.fuente-display {
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Foco de teclado consistente y visible en toda la app. */
+:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Desplegables nativos legibles en los dos temas: el popup y sus opciones
+   heredan fondo y texto de la app, no del sistema (que en oscuro podía dar
+   texto claro sobre fondo claro). Se combina con `color-scheme` y con el fondo
+   opaco de los <select> (ver src/lib/ui.ts). */
+option {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+/* ----------------------------------------------------------- animaciones
+ * Sutiles y cortas. La entrada de <main> se dispara en cada navegación
+ * (App Router remonta main), así que da la sensación de transición entre
+ * pantallas. Todo se apaga con prefers-reduced-motion. */
+
+@keyframes entrada-pagina {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes entrada-suave {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+main {
+  animation: entrada-pagina 0.28s ease-out both;
+}
+
+/* Utilidad para elementos que aparecen (input de categoría nueva, avisos). */
+.animar-entrada {
+  animation: entrada-suave 0.18s ease-out both;
+}
+
+/* El modal nativo <dialog>: aparece con un fade + leve subida. */
+dialog[open] {
+  animation: entrada-suave 0.2s ease-out both;
+}
+dialog::backdrop {
+  animation: fade-backdrop 0.2s ease-out both;
+}
+@keyframes fade-backdrop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------ carga
+ * Wordmark que late + barra indeterminada que se desliza. Coherente con la
+ * paleta (usa --foreground) y se ve en los dos temas. */
+.cargando-latido {
+  animation: cargando-latido 1.4s ease-in-out infinite;
+}
+@keyframes cargando-latido {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.cargando-barra {
+  position: relative;
+  width: 128px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+.cargando-barra::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  border-radius: 999px;
+  background: var(--foreground);
+  animation: cargando-desliz 1.15s ease-in-out infinite;
+}
+@keyframes cargando-desliz {
+  0% {
+    transform: translateX(-115%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  main,
+  .animar-entrada,
+  dialog[open],
+  dialog::backdrop,
+  .cargando-latido,
+  .cargando-barra::after {
+    animation: none;
+  }
 }
 
 /*
@@ -53,10 +214,12 @@ body {
 
 @media (prefers-color-scheme: dark) {
   .viz {
-    --viz-surface: #0a0a0a;
-    --viz-grid: #2c2c2a;
-    --viz-axis: #383835;
-    --viz-muted: #898781;
+    /* Neutros con el mismo tinte violeta que el resto del modo oscuro. Los 8
+       tonos de datos NO cambian: son los validados para daltonismo. */
+    --viz-surface: #201a29;
+    --viz-grid: #2d2638;
+    --viz-axis: #3b3249;
+    --viz-muted: #978fa6;
 
     --viz-1: #3987e5;
     --viz-2: #d95926;
