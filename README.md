@@ -86,22 +86,26 @@ La `ANTHROPIC_API_KEY` vive sólo en el servidor: la llamada se hace desde
 
 ### Cómo se lee el PDF
 
-Primero se extrae el **texto plano** con `pdf-parse` (`src/lib/pdf.ts`) y se le
+Primero se extrae el **texto plano** con `unpdf` (`src/lib/pdf.ts`) y se le
 manda ese texto a Claude. Los importes salen de los caracteres del PDF, no de
 leer una imagen, y se gastan bastante menos tokens.
 
-Si el PDF **no tiene texto extraíble** — un resumen escaneado, o uno que
-`pdf-parse` no puede abrir — se cae al método anterior: el PDF como bloque
-`document`, que Claude procesa como texto más imágenes de las páginas. La
-respuesta trae `metodo: "texto" | "vision"` y la pantalla avisa cuando usó
-visión, porque ahí sí conviene revisar los importes con atención.
+Si el PDF **no tiene texto extraíble** — un resumen escaneado, o uno que pdfjs
+no puede abrir — se cae al método anterior: el PDF como bloque `document`, que
+Claude procesa como texto más imágenes de las páginas. La respuesta trae
+`metodo: "texto" | "vision"` y la pantalla avisa cuando usó visión, porque ahí
+sí conviene revisar los importes con atención.
 
-> `extraerTexto` copia el buffer antes de pasárselo a `pdf-parse`: pdfjs
-> transfiere el `ArrayBuffer` al worker y lo deja *detached*. Sin esa copia el
-> fallback a visión se quedaría sin bytes.
+> **Por qué `unpdf` y no `pdf-parse`:** `pdf-parse` arrastra un build de pdfjs
+> que referencia `DOMMatrix` (una API de navegador) al cargar el módulo. En las
+> funciones serverless de Vercel eso rompe con `DOMMatrix is not defined`.
+> `unpdf` trae un pdfjs empaquetado para serverless que se autopolyfilea esas
+> APIs, así que extrae el mismo texto sin depender del entorno. La ruta declara
+> `export const runtime = "nodejs"` para no caer nunca en el runtime Edge.
 
-`next.config.ts` marca `pdf-parse` como `serverExternalPackages` para que Next
-no lo bundlee (arrastra pdfjs, que se resuelve en tiempo de ejecución).
+> `extraerTexto` copia el buffer (`.slice()`) antes de pasárselo a pdfjs: pdfjs
+> transfiere el `ArrayBuffer` y lo deja *detached*. Sin esa copia el fallback a
+> visión se quedaría sin bytes.
 
 Usa **salida estructurada** (`output_config.format` con un JSON Schema), así que
 la API garantiza que la respuesta es JSON válido y que la categoría sale de

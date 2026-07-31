@@ -11,6 +11,10 @@ import {
 } from "@/lib/extraccion";
 import { MAX_CARACTERES, extraerTexto } from "@/lib/pdf";
 
+// Runtime Node explícito: la extracción de PDF (unpdf/pdfjs) y el SDK de
+// Anthropic usan APIs de Node que el runtime Edge no tiene.
+export const runtime = "nodejs";
+
 /** Vercel corta los request bodies en 4.5 MB; nos quedamos abajo. */
 const MAX_BYTES = 4 * 1024 * 1024;
 
@@ -66,8 +70,8 @@ export async function POST(request: NextRequest) {
     return error(`El PDF pesa ${mb} MB y el máximo son 4 MB.`, 413);
   }
 
-  // De acá en adelante todo va en un try/catch: si algo explota (pdf-parse,
-  // el buffer, la API), lo logueamos con detalle y devolvemos SIEMPRE un JSON
+  // De acá en adelante todo va en un try/catch: si algo explota (la extracción
+  // de texto, el buffer, la API), lo logueamos con detalle y devolvemos un JSON
   // con `error`. Sin esto, un error no controlado devolvía un 500 en HTML y el
   // cliente sólo veía el mensaje genérico, sin pista de la causa.
   try {
@@ -195,7 +199,7 @@ export async function POST(request: NextRequest) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (e) {
-    // Cualquier cosa no controlada: pdf-parse, el buffer, base64, memoria…
+    // Cualquier cosa no controlada: la extracción, el buffer, base64, memoria…
     console.error("[importar] error inesperado en la ruta:", e);
     return error(
       "Error inesperado procesando el PDF. Revisá los logs del servidor para el detalle.",
