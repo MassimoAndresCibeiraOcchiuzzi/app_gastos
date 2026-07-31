@@ -144,14 +144,22 @@ export default function ImportarPdf({
 
       // Si venció la sesión, el proxy redirige al login.
       if (respuesta.redirected) {
-        window.location.href = respuesta.url;
+        window.location.assign(respuesta.url);
         return;
       }
 
       const cuerpo = await respuesta.json().catch(() => null);
 
       if (!respuesta.ok) {
-        setError(cuerpo?.error ?? "No pudimos procesar el PDF.");
+        // Si el servidor devolvió un JSON con `error`, ese es el mensaje bueno.
+        // Si no (crash no controlado, timeout de la plataforma, 413 del host…),
+        // el cuerpo no es JSON: mostramos algo según el status HTTP, que ya de
+        // por sí dice mucho (504 = timeout, 413 = muy grande, 500 = crash).
+        console.error(
+          `[importar] respuesta ${respuesta.status} del servidor`,
+          cuerpo ?? "(cuerpo no-JSON)",
+        );
+        setError(cuerpo?.error ?? mensajePorEstado(respuesta.status));
         setEstado("vacio");
         return;
       }
@@ -171,10 +179,30 @@ export default function ImportarPdf({
       setMetodo(cuerpo?.metodo === "vision" ? "vision" : "texto");
       setTotalResumen((cuerpo?.totalResumen ?? TOTAL_VACIO) as TotalResumen);
       setEstado("revisando");
-    } catch {
-      setError("Se cortó la conexión mientras analizábamos el PDF.");
+    } catch (err) {
+      // No llegó ni a haber respuesta: red caída o, muy común, el navegador
+      // cortó la espera porque el servidor tardó demasiado (timeout).
+      console.error("[importar] falló el fetch a /api/importar", err);
+      setError(
+        "Se cortó la conexión mientras analizábamos el PDF. Si el archivo es grande, puede haber sido un timeout: probá con menos páginas.",
+      );
       setEstado("vacio");
     }
+  }
+
+  /** Mensaje según el status HTTP cuando el servidor no devolvió un JSON. */
+  function mensajePorEstado(status: number): string {
+    if (status === 504 || status === 408) {
+      return "El servidor tardó demasiado y cortó el proceso (timeout). El PDF puede ser muy pesado, o el límite de tiempo del servidor es corto. Probá con menos páginas.";
+    }
+    if (status === 413) return "El archivo es demasiado grande.";
+    if (status === 502 || status === 503) {
+      return "El servicio no está disponible en este momento. Probá de nuevo en un rato.";
+    }
+    if (status >= 500) {
+      return `Error interno del servidor (${status}). Revisá los logs del servidor para ver el detalle.`;
+    }
+    return `El servidor rechazó la solicitud (${status}).`;
   }
 
   /** Cambiar el mes reimputa todas las filas menos las que tocaste a mano. */
