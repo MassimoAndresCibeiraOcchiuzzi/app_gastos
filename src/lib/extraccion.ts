@@ -1,8 +1,4 @@
-import {
-  CATEGORIAS_CONSUMO,
-  CATEGORIA_POR_DEFECTO,
-  esCategoriaValida,
-} from "./categorias";
+import { CATEGORIA_TARJETA } from "./categorias";
 import { redondearCentavos } from "./formato";
 
 /** Lo que le pedimos a Claude por cada consumo del resumen. */
@@ -16,13 +12,12 @@ export type ItemExtraido = {
   descripcion: string;
   /** Importe del consumo, siempre positivo. */
   monto: number;
-  categoria_sugerida: string;
 };
 
 /**
- * Esquema de salida estructurada. Con esto la API garantiza que la respuesta
- * es JSON válido y que `categoria_sugerida` es una de las nuestras: no hace
- * falta rezar para que el modelo respete el formato.
+ * Esquema de salida estructurada. Con esto la API garantiza que la respuesta es
+ * JSON válido con la forma esperada. Ya no se pide categoría por ítem: todo lo
+ * importado entra como "Tarjeta" (ver `aCamposGuardables`).
  */
 export const ESQUEMA_EXTRACCION = {
   type: "object",
@@ -50,13 +45,8 @@ export const ESQUEMA_EXTRACCION = {
             description:
               "Importe del consumo en pesos, SIEMPRE POSITIVO. Un resumen de tarjeta sólo genera gastos: nunca devuelvas un monto negativo.",
           },
-          categoria_sugerida: {
-            type: "string",
-            enum: [...CATEGORIAS_CONSUMO],
-            description: "La categoría que mejor describe el movimiento.",
-          },
         },
-        required: ["fecha", "descripcion", "monto", "categoria_sugerida"],
+        required: ["fecha", "descripcion", "monto"],
         additionalProperties: false,
       },
     },
@@ -102,8 +92,7 @@ Sólo las líneas que son una compra o consumo puntual: tienen fecha, número de
     : `\n- Impuestos, percepciones y sus devoluciones: IIBB, "IVA RG", "DB.RG", "RG 4815", "PERCEPCION", "IMP. LEY 25413", impuesto de sellos, "DEV. IMP.", "DEVOLUCION IMPUESTO", "REINTEGRO", intereses, punitorios, cargos administrativos y seguros de la propia tarjeta.`;
 
   const montoImpuestos = incluirImpuestos
-    ? `\n- monto de impuestos y percepciones: su magnitud en pesos, en POSITIVO. No te preocupes por el signo de las devoluciones: devolvelas también en positivo, del signo nos ocupamos nosotros.
-- categoria de impuestos y percepciones: usá "Servicios".`
+    ? `\n- monto de impuestos y percepciones: su magnitud en pesos, en POSITIVO. No te preocupes por el signo de las devoluciones: devolvelas también en positivo, del signo nos ocupamos nosotros.`
     : "";
 
   return `Extraé de este resumen (de tarjeta, de cuenta bancaria o de billetera virtual) lo que se pide abajo y devolvelo como JSON.
@@ -123,7 +112,6 @@ CÓMO DEVOLVER CADA LÍNEA
 - fecha: la de la operación tal como figura en la línea, en formato YYYY-MM-DD. Si sólo aparecen día y mes, deducí el año del período del resumen; si el resumen abarca dos años (por ejemplo diciembre y enero), asigná a cada uno el que corresponda. En compras en cuotas es la fecha de la compra original, que puede ser de varios meses atrás: dejala como está.
 - descripcion: el comercio (o el nombre del impuesto) como figura en el resumen, limpio de códigos internos, conservando la indicación de cuota si la hay (por ejemplo "SMARTPHONE XYZ - Cuota 03/06").
 - monto de consumos: el importe en pesos argentinos, como número POSITIVO, sin símbolos ni separadores de miles y con punto para los decimales. Los consumos son gastos: nunca devuelvas un consumo con monto negativo.${montoImpuestos}
-- categoria_sugerida de consumos: la que mejor describa el comercio, de la lista permitida. Si ninguna encaja, usá "Otros".
 
 EL TOTAL DEL RESUMEN (campo total_resumen)
 Es el monto que el banco efectivamente debita, y se usa como referencia para verificar la suma. Buscalo en este orden:
@@ -322,6 +310,9 @@ export function clasificarItems(
  * impuestos, saldos) son justamente las que el prompt ahora excluye. Si aun
  * así llegara un monto negativo, lo tomamos como gasto en vez de fabricar un
  * ingreso que rompa el balance. El tipo sigue siendo editable en la tabla.
+ *
+ * La categoría es fija: **"Tarjeta"** para todo lo importado de un resumen. El
+ * usuario puede cambiarla fila por fila en la tabla de revisión.
  */
 export function aCamposGuardables(item: ItemExtraido): {
   descripcion: string;
@@ -333,9 +324,7 @@ export function aCamposGuardables(item: ItemExtraido): {
     descripcion: item.descripcion,
     monto: Math.abs(item.monto).toFixed(2),
     tipo: "egreso",
-    categoria: esCategoriaValida(item.categoria_sugerida)
-      ? item.categoria_sugerida
-      : CATEGORIA_POR_DEFECTO,
+    categoria: CATEGORIA_TARJETA,
   };
 }
 
@@ -415,22 +404,13 @@ export function parsearRespuesta(texto: string): ResultadoExtraccion {
   const validos: ItemExtraido[] = [];
   for (const item of items) {
     if (typeof item !== "object" || item === null) continue;
-    const { fecha, descripcion, monto, categoria_sugerida } = item as Record<
-      string,
-      unknown
-    >;
+    const { fecha, descripcion, monto } = item as Record<string, unknown>;
 
     if (typeof fecha !== "string") continue;
     if (typeof descripcion !== "string") continue;
     if (typeof monto !== "number" || !Number.isFinite(monto)) continue;
 
-    validos.push({
-      fecha,
-      descripcion: descripcion.trim(),
-      monto,
-      categoria_sugerida:
-        typeof categoria_sugerida === "string" ? categoria_sugerida : "Otros",
-    });
+    validos.push({ fecha, descripcion: descripcion.trim(), monto });
   }
 
   return { ok: true, items: validos, totalResumen };

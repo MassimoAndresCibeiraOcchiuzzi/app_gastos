@@ -11,6 +11,7 @@ export const CATEGORIAS_CONSUMO = [
   "Entretenimiento",
   "Salud",
   "Otros",
+  "Tarjeta",
 ] as const;
 
 /**
@@ -29,6 +30,13 @@ export type Categoria = (typeof CATEGORIAS)[number];
 /** Categoría preseleccionada en el formulario. */
 export const CATEGORIA_POR_DEFECTO: Categoria = "Otros";
 
+/**
+ * Categoría fija que se asigna a TODO lo importado de un resumen de tarjeta.
+ * La importación ya no pide una categoría por ítem a la IA: entra todo como
+ * "Tarjeta" y el usuario recategoriza a mano en la tabla si quiere.
+ */
+export const CATEGORIA_TARJETA: Categoria = "Tarjeta";
+
 export function esCategoriaValida(valor: unknown): valor is Categoria {
   return (
     typeof valor === "string" && (CATEGORIAS as readonly string[]).includes(valor)
@@ -39,14 +47,16 @@ export function esCategoriaValida(valor: unknown): valor is Categoria {
 export const CUENTAS_SUGERIDAS = ["Efectivo", "Tarjeta", "Débito", "Transferencia"];
 
 /**
- * Color de cada categoría en los gráficos. El color sigue a la categoría, no a
- * su posición en el ranking: si un mes Comida deja de ser la más grande, sigue
- * siendo azul. Los valores están en globals.css (`.viz`), que resuelve claro y
- * oscuro. Los 8 tonos de consumo son un orden validado para daltonismo; no hay
- * que inventar un noveno. "Ajustes tarjeta" usa el neutro porque no se dibuja
- * en la torta.
+ * Color fijo de algunas categorías en los gráficos. El color sigue a la
+ * categoría, no a su posición en el ranking: si un mes Comida deja de ser la más
+ * grande, sigue siendo azul. Los valores están en globals.css (`.viz`), que
+ * resuelve claro y oscuro. Los 8 tonos son un orden validado para daltonismo.
+ *
+ * Es `Partial`: las categorías sin tono explícito (como "Tarjeta") caen al hash
+ * de `colorDeCategoria`, igual que las personalizadas, en vez de forzar un
+ * noveno tono inventado. "Ajustes tarjeta" usa el neutro porque no se dibuja.
  */
-export const COLOR_CATEGORIA: Record<Categoria, string> = {
+export const COLOR_CATEGORIA: Partial<Record<Categoria, string>> = {
   Comida: "var(--viz-1)",
   Transporte: "var(--viz-2)",
   Suscripciones: "var(--viz-3)",
@@ -92,8 +102,9 @@ function indiceColor(texto: string): number {
  */
 export function colorDeCategoria(categoria: string | null): string {
   if (categoria === null || categoria.trim() === "") return COLOR_SIN_CATEGORIA;
-  if (esCategoriaValida(categoria)) return COLOR_CATEGORIA[categoria];
-  return VIZ[indiceColor(categoria)];
+  // Del sistema con tono fijo → ese; del sistema sin tono ("Tarjeta") o
+  // personalizada → el hash sobre los 8 validados.
+  return COLOR_CATEGORIA[categoria as Categoria] ?? VIZ[indiceColor(categoria)];
 }
 
 /** Máximo de caracteres de un nombre de categoría (coincide con el CHECK del SQL). */

@@ -15,7 +15,6 @@ import {
   ESQUEMA_EXTRACCION,
   PROMPT_EXTRACCION,
 } from "../src/lib/extraccion.ts";
-import { CATEGORIAS_CONSUMO } from "../src/lib/categorias.ts";
 
 const json = (obj) => JSON.stringify(obj);
 
@@ -27,19 +26,32 @@ test("parsearRespuesta acepta la forma esperada", () => {
           fecha: "2026-07-03",
           descripcion: "  Verdulería  ",
           monto: 12500.5,
-          categoria_sugerida: "Comida",
         },
       ],
     }),
   );
   assert.equal(r.ok, true);
   assert.deepEqual(r.items, [
-    {
-      fecha: "2026-07-03",
-      descripcion: "Verdulería",
-      monto: 12500.5,
-      categoria_sugerida: "Comida",
-    },
+    { fecha: "2026-07-03", descripcion: "Verdulería", monto: 12500.5 },
+  ]);
+});
+
+test("parsearRespuesta ignora una categoría que mande el modelo de más", () => {
+  // Ya no pedimos categoría; si el modelo la manda igual, no se guarda.
+  const r = parsearRespuesta(
+    json({
+      items: [
+        {
+          fecha: "2026-07-03",
+          descripcion: "Verdulería",
+          monto: 100,
+          categoria_sugerida: "Comida",
+        },
+      ],
+    }),
+  );
+  assert.deepEqual(r.items, [
+    { fecha: "2026-07-03", descripcion: "Verdulería", monto: 100 },
   ]);
 });
 
@@ -48,14 +60,7 @@ test("parsearRespuesta no toca los montos que le llegan", () => {
   // es aCamposGuardables.
   const r = parsearRespuesta(
     json({
-      items: [
-        {
-          fecha: "2026-07-10",
-          descripcion: "Algo raro",
-          monto: -50000,
-          categoria_sugerida: "Otros",
-        },
-      ],
+      items: [{ fecha: "2026-07-10", descripcion: "Algo raro", monto: -50000 }],
     }),
   );
   assert.equal(r.items[0].monto, -50000);
@@ -78,10 +83,10 @@ test("parsearRespuesta descarta filas con campos rotos", () => {
   const r = parsearRespuesta(
     json({
       items: [
-        { fecha: "2026-07-03", descripcion: "ok", monto: 100, categoria_sugerida: "Comida" },
-        { fecha: 20260703, descripcion: "fecha numérica", monto: 100, categoria_sugerida: "Comida" },
-        { fecha: "2026-07-04", descripcion: "monto texto", monto: "100", categoria_sugerida: "Comida" },
-        { fecha: "2026-07-05", descripcion: "monto NaN", monto: Number.NaN, categoria_sugerida: "Comida" },
+        { fecha: "2026-07-03", descripcion: "ok", monto: 100 },
+        { fecha: 20260703, descripcion: "fecha numérica", monto: 100 },
+        { fecha: "2026-07-04", descripcion: "monto texto", monto: "100" },
+        { fecha: "2026-07-05", descripcion: "monto NaN", monto: Number.NaN },
         null,
       ],
     }),
@@ -89,17 +94,6 @@ test("parsearRespuesta descarta filas con campos rotos", () => {
   assert.equal(r.ok, true);
   assert.equal(r.items.length, 1);
   assert.equal(r.items[0].descripcion, "ok");
-});
-
-test("parsearRespuesta cae en Otros si la categoría no es texto", () => {
-  const r = parsearRespuesta(
-    json({
-      items: [
-        { fecha: "2026-07-03", descripcion: "x", monto: 1, categoria_sugerida: 7 },
-      ],
-    }),
-  );
-  assert.equal(r.items[0].categoria_sugerida, "Otros");
 });
 
 test("parsearRespuesta tolera una lista vacía", () => {
@@ -112,7 +106,6 @@ const item = (extra) => ({
   fecha: "2026-06-03",
   descripcion: "SUPERMERCADO DIA",
   monto: 45230,
-  categoria_sugerida: "Comida",
   ...extra,
 });
 
@@ -123,7 +116,7 @@ test("aCamposGuardables marca todo como egreso", () => {
     descripcion: "SUPERMERCADO DIA",
     monto: "120000.00",
     tipo: "egreso",
-    categoria: "Comida",
+    categoria: "Tarjeta",
   });
 });
 
@@ -133,10 +126,13 @@ test("aCamposGuardables deja el monto positivo y con 2 decimales", () => {
   assert.equal(aCamposGuardables(item({ monto: 0.5 })).monto, "0.50");
 });
 
-test("aCamposGuardables cae en Otros si la categoría no es de las nuestras", () => {
-  assert.equal(aCamposGuardables(item({ categoria_sugerida: "Viajes" })).categoria, "Otros");
-  assert.equal(aCamposGuardables(item({ categoria_sugerida: "" })).categoria, "Otros");
-  assert.equal(aCamposGuardables(item({ categoria_sugerida: "Salud" })).categoria, "Salud");
+test("aCamposGuardables asigna siempre la categoría Tarjeta", () => {
+  // Ya no depende de lo que sugiera la IA: todo lo importado entra como Tarjeta.
+  assert.equal(aCamposGuardables(item()).categoria, "Tarjeta");
+  assert.equal(
+    aCamposGuardables(item({ descripcion: "FARMACIA" })).categoria,
+    "Tarjeta",
+  );
 });
 
 test("aCamposGuardables conserva la descripción tal cual, con la cuota", () => {
@@ -417,9 +413,16 @@ test("prompt con impuestos: pide extraerlos como ítems individuales", () => {
   assert.match(p, /dos clases de línea/);
   assert.match(p, /IMPUESTOS, PERCEPCIONES Y DEVOLUCIONES/);
   assert.match(p, /NO las agrupes ni las sumes/);
-  // Le dice que use Servicios y que no se preocupe por el signo.
-  assert.match(p, /usá "Servicios"/);
+  // No se preocupa por el signo; del resto (categoría) ya no le pedimos nada.
   assert.match(p, /del signo nos ocupamos nosotros/);
+});
+
+test("ningún prompt le pide una categoría a la IA", () => {
+  // El cambio: todo lo importado entra como "Tarjeta", sin sugerencia por ítem.
+  for (const p of [promptExtraccion(false), promptExtraccion(true)]) {
+    assert.doesNotMatch(p, /categoria_sugerida/);
+    assert.doesNotMatch(p, /categoría que mejor/i);
+  }
 });
 
 test("ambos prompts mantienen el total del resumen", () => {
@@ -465,16 +468,10 @@ test("ambos prompts piden los consumos en positivo", () => {
 
 test("el esquema le pide a la API exactamente los campos acordados", () => {
   const item = ESQUEMA_EXTRACCION.properties.items.items;
-  assert.deepEqual(
-    [...item.required],
-    ["fecha", "descripcion", "monto", "categoria_sugerida"],
-  );
+  // Ya no se pide categoría por ítem: sólo fecha, descripción y monto.
+  assert.deepEqual([...item.required], ["fecha", "descripcion", "monto"]);
   // additionalProperties: false es obligatorio para salida estructurada.
   assert.equal(item.additionalProperties, false);
   assert.equal(ESQUEMA_EXTRACCION.additionalProperties, false);
-  // La IA sólo puede sugerir categorías de consumo, nunca "Ajustes tarjeta".
-  assert.deepEqual(
-    [...item.properties.categoria_sugerida.enum],
-    [...CATEGORIAS_CONSUMO],
-  );
+  assert.equal(item.properties.categoria_sugerida, undefined);
 });

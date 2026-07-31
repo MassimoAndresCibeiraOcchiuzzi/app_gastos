@@ -66,18 +66,22 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
 
 ### Sobre las categorías
 
-Las **8 del sistema** (Comida, Transporte, Suscripciones, Alquiler, Servicios,
-Entretenimiento, Salud, Otros) viven en código (`src/lib/categorias.ts`,
-`CATEGORIAS_CONSUMO`): son iguales para todos, versionadas, sin sembrar nada por
-usuario. La tabla `categorias` guarda **sólo las personalizadas**, con RLS para
-que cada uno vea las suyas.
+Las **del sistema** (Comida, Transporte, Suscripciones, Alquiler, Servicios,
+Entretenimiento, Salud, Otros y **Tarjeta**) viven en código
+(`src/lib/categorias.ts`, `CATEGORIAS_CONSUMO`): son iguales para todos,
+versionadas, sin sembrar nada por usuario. La tabla `categorias` guarda **sólo
+las personalizadas**, con RLS para que cada uno vea las suyas.
+
+**Tarjeta** es la categoría por defecto de todo lo que se importa de un resumen:
+la importación ya no le pide una categoría por ítem a la IA (ver más abajo).
 
 Las transacciones guardan la categoría como **texto**, no como id: por eso una
 categoría se puede borrar sólo si no la usa ninguna transacción, y por eso la
 torta agrupa por el nombre y toma cualquier categoría nueva sin cambios de
-código. El color de una personalizada sale de un hash estable de su nombre sobre
-los 8 tonos validados (mismo nombre → mismo color); la torta muestra el nombre
-al lado de cada porción, así el color nunca es el único canal.
+código. El color sale de `COLOR_CATEGORIA` si la categoría tiene uno fijo, o de
+un hash estable de su nombre sobre los 8 tonos validados si no (las
+personalizadas y "Tarjeta"); mismo nombre → mismo color. La torta muestra el
+nombre al lado de cada porción, así el color nunca es el único canal.
 
 ### Sobre la importación
 
@@ -108,18 +112,20 @@ sí conviene revisar los importes con atención.
 > visión se quedaría sin bytes.
 
 Usa **salida estructurada** (`output_config.format` con un JSON Schema), así que
-la API garantiza que la respuesta es JSON válido y que la categoría sale de
-`CATEGORIAS`. El esquema y el prompt están en `src/lib/extraccion.ts`.
+la API garantiza que la respuesta es JSON válido. El esquema y el prompt están en
+`src/lib/extraccion.ts`.
 
-El modelo devuelve los cuatro campos acordados (`fecha`, `descripcion`, `monto`,
-`categoria_sugerida`).
+El modelo devuelve tres campos por consumo (`fecha`, `descripcion`, `monto`). La
+**categoría no se le pide**: todo lo importado entra con la categoría fija
+`"Tarjeta"` (`aCamposGuardables`), y el usuario la cambia a mano en la tabla de
+revisión si quiere.
 
 ### Qué se extrae y qué no
 
-Los **consumos** se importan siempre: una transacción por línea, con su
-comercio y categoría, tipo egreso. Si el modelo devolviera un consumo con monto
-negativo, `aCamposGuardables` lo toma en valor absoluto (nunca fabrica un
-ingreso a partir de un consumo).
+Los **consumos** se importan siempre: una transacción por línea, con su comercio
+como descripción, categoría `"Tarjeta"` y tipo egreso. Si el modelo devolviera
+un consumo con monto negativo, `aCamposGuardables` lo toma en valor absoluto
+(nunca fabrica un ingreso a partir de un consumo).
 
 Los **impuestos y percepciones** (IIBB, PERCEP, IVA RG, DB.RG, IMP. LEY, y sus
 devoluciones DEV.IMP / DEVOLUCION / REINTEGRO) dependen de un **toggle** que el
@@ -234,9 +240,10 @@ Librería: **recharts** — declarativa, se lleva bien con React 19, tiene
 arrastra D3 entero. Cuesta ~390 KB del bundle, pero sólo lo carga `/dashboard`.
 
 Los colores están en `globals.css` bajo `.viz` y se mapean a cada categoría en
-`src/lib/categorias.ts` (`COLOR_CATEGORIA`). Son 8 tonos en un orden validado
-para daltonismo: el color sigue a la categoría, no a su puesto en el ranking.
-Si agregás una categoría, dale el slot que sigue en vez de inventar un color.
+`src/lib/categorias.ts` (`COLOR_CATEGORIA` + el hash de `colorDeCategoria`). Son
+8 tonos en un orden validado para daltonismo: el color sigue a la categoría, no
+a su puesto en el ranking. Las que no tienen tono fijo (personalizadas y
+"Tarjeta") reciben uno de los 8 por hash del nombre.
 
 ## Modelo de datos
 
@@ -384,15 +391,16 @@ Ejemplo: una nota opcional por transacción.
 
 ### Agregar una categoría del sistema
 
-Las del sistema son las que ve todo el mundo y las que la IA puede sugerir. Todo
-está en `src/lib/categorias.ts`:
+Las del sistema son las que ve todo el mundo. Todo está en
+`src/lib/categorias.ts`:
 
 1. Agregá el nombre a `CATEGORIAS_CONSUMO`.
-2. Dale su color en `COLOR_CATEGORIA`: usá **el slot que sigue** (`--viz-1..8` en
-   `globals.css`), no inventes un tono nuevo — los 8 están validados para
-   daltonismo. Si ya usaste los 8, hay que decidir antes de sumar un noveno.
-3. Listo: el selector, el enum del esquema de extracción (`ESQUEMA_EXTRACCION`) y
-   la torta la toman solas, porque todos parten de esa lista.
+2. Color: los primeros 8 tienen un tono fijo en `COLOR_CATEGORIA` (`--viz-1..8`
+   en `globals.css`, un orden validado para daltonismo). Del noveno en adelante
+   **no** agregues una entrada: dejala sin color y `colorDeCategoria` le asigna
+   uno de los 8 por hash del nombre (como a las personalizadas). No inventes un
+   noveno tono.
+3. Listo: el selector y la torta la toman solas, porque parten de esa lista.
 
 > No confundir con las categorías **personalizadas**: esas las crea cada usuario
 > desde el selector y van a la tabla `categorias`, sin tocar código.
