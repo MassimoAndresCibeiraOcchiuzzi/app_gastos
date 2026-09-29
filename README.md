@@ -134,6 +134,8 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
 - [x] Agrupado de las cuotas de una misma compra a lo largo de los meses
 - [x] Tarjeta en el Dashboard: lo comprometido para el mes que viene, un mini
       gráfico hasta la última cuota y el detalle de las compras
+- [x] Navegación entre los meses futuros con cuotas (flechas ‹ › o tocando una
+      barra), con el detalle de las compras de cada mes
 
 ### Sobre las cuotas
 
@@ -153,7 +155,13 @@ es de una compra con la cuota 1 en julio. Dos cuotas con el mismo número en el
 mismo mes son dos compras iguales (se muestran "×2").
 
 La proyección arranca el mes que viene y sigue el calendario de cada compra,
-aunque falte importar algún mes. Se buscan compras en los últimos 12 meses.
+aunque falte importar algún mes, hasta la última cuota de todas. Se buscan
+compras en los últimos 12 meses.
+
+En la tarjeta, las flechas ‹ › y las barras recorren los meses con alguna
+cuota (uno del medio en $0 se saltea). El mes elegido es estado local, no va
+a la URL: no cambia qué mes muestra el resto del Dashboard. Las barras se
+muestran de a 12; si hay más meses, pasan a la tanda siguiente al avanzar.
 
 ### Sobre la meta de ahorro
 

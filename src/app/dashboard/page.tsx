@@ -160,7 +160,7 @@ export default async function Dashboard({
 
           {cuotas && (
             <Tarjeta titulo="Cuotas comprometidas">
-              <CuotasComprometidas proyeccion={cuotas} mesHoy={mesDeHoy} />
+              <CuotasComprometidas proyeccion={cuotas} />
             </Tarjeta>
           )}
 

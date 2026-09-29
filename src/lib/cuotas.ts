@@ -204,13 +204,14 @@ export type ProyeccionCuotas = {
  * `mesPrimera`, una por mes), no de lo último cargado: si un mes no se
  * importó, la proyección no se corre.
  *
- * `horizonte` limita cuántos meses se devuelven en `meses` (para el gráfico);
- * `totalPendiente` y `compras` cuentan todo, hasta la última cuota.
+ * `meses` llega hasta la última cuota de todas las compras (así se pueden
+ * recorrer todos los meses con algo comprometido). `horizonte` lo puede
+ * acortar; `totalPendiente` y `compras` cuentan todo igual.
  */
 export function proyectarCuotas(
   compras: CompraEnCuotas[],
   mesHoy: string,
-  horizonte = 12,
+  horizonte?: number,
 ): ProyeccionCuotas {
   const activas: CompraActiva[] = [];
   for (const c of compras) {
@@ -236,8 +237,10 @@ export function proyectarCuotas(
     (a, b) => b.pendiente - a.pendiente || a.nombre.localeCompare(b.nombre, "es"),
   );
 
+  const hastaUltima = Math.max(0, ...compras.map((c) => mesesEntre(mesHoy, c.mesUltima)));
+  const cantidad = Math.min(horizonte ?? hastaUltima, hastaUltima, MAX_CUOTAS);
   const meses: MesComprometido[] = [];
-  for (let i = 1; i <= horizonte; i++) {
+  for (let i = 1; i <= cantidad; i++) {
     const mes = sumarMeses(mesHoy, i);
     const cuotas: CuotaDelMes[] = [];
     for (const c of compras) {
