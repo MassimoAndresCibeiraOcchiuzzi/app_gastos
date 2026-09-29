@@ -252,8 +252,9 @@ export default function ImportarPdf({
       // El ajuste no lleva cuenta: no es un consumo de ninguna en particular.
       cuenta: f.esAjuste ? "" : cuenta,
       fecha: f.fecha,
-      // Sólo el ajuste puede tener monto negativo (crédito neto de impuestos).
-      permitirMontoNegativo: f.esAjuste,
+      // Si el monto puede ser negativo lo decide el servidor, por categoría y
+      // tipo (ver `admiteMontoNegativo`): el ajuste ya viaja como egreso de
+      // "Ajustes tarjeta".
     }));
 
     iniciar(async () => {
