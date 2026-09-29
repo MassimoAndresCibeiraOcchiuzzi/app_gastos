@@ -47,7 +47,16 @@ export default function CategoriasMes({
   const params = useSearchParams();
   const ruta = usePathname();
   const cat = params.get("cat");
-  const [hover, setHover] = useState<number | null>(null);
+  // Qué porción resalta la dona: la de la categoría abierta, que sale de la
+  // URL y es la única fuente de verdad. `hoverMouse` es un extra sólo para
+  // mouse de verdad: en pantallas táctiles el navegador simula un
+  // `mouseenter` al tocar pero nunca el `mouseleave` al levantar el dedo, y
+  // un hover así quedaba pegado aunque se cerrara el detalle.
+  const [hoverMouse, setHoverMouse] = useState<number | null>(null);
+  // El tipo del último puntero. Los eventos de puntero llegan antes que los
+  // de mouse que el navegador emula para un toque, así que cuando recharts
+  // avisa un `mouseenter` ya se sabe si vino de un dedo.
+  const tipoPuntero = useRef<string>("mouse");
   const filasRef = useRef<(HTMLLIElement | null)[]>([]);
   const idBase = useId();
 
@@ -125,13 +134,29 @@ export default function CategoriasMes({
 
   const indiceAbierta = filas.findIndex((f) => f.clave === abierta);
 
+  /** Hover desde la dona: sólo si el puntero es un mouse. Salir, siempre. */
+  function resaltarDesdeTorta(indice: number | null) {
+    if (indice === null || tipoPuntero.current === "mouse") setHoverMouse(indice);
+  }
+
   return (
-    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,17rem)_1fr] lg:items-start lg:gap-6">
+    <div
+      className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,17rem)_1fr] lg:items-start lg:gap-6"
+      // Captura: se entera del tipo de puntero antes que la dona y las filas.
+      // Un toque borra cualquier hover que haya quedado.
+      onPointerDownCapture={(e) => {
+        tipoPuntero.current = e.pointerType;
+        if (e.pointerType !== "mouse") setHoverMouse(null);
+      }}
+      onPointerMoveCapture={(e) => {
+        tipoPuntero.current = e.pointerType;
+      }}
+    >
       <TortaEgresos
         porciones={filas.map(({ categoria, monto, color }) => ({ categoria, monto, color }))}
         total={total}
-        activo={hover ?? (indiceAbierta === -1 ? null : indiceAbierta)}
-        onResaltar={setHover}
+        activo={hoverMouse ?? (indiceAbierta === -1 ? null : indiceAbierta)}
+        onResaltar={resaltarDesdeTorta}
         onElegir={elegirPorcion}
       />
 
@@ -152,8 +177,10 @@ export default function CategoriasMes({
                 ref={(el) => {
                   filasRef.current[i] = el;
                 }}
-                onMouseEnter={() => setHover(i)}
-                onMouseLeave={() => setHover(null)}
+                onPointerEnter={(e) => {
+                  if (e.pointerType === "mouse") setHoverMouse(i);
+                }}
+                onPointerLeave={() => setHoverMouse(null)}
               >
                 <BotonFila
                   fila={fila}
