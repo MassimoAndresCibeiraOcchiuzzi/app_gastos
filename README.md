@@ -116,19 +116,25 @@ la API garantiza que la respuesta es JSON válido. El esquema y el prompt están
 `src/lib/extraccion-prompt.ts`, marcado `server-only` para que no viajen al
 navegador.
 
-El modelo devuelve tres campos por consumo (`fecha`, `descripcion`, `monto`). La
-**categoría no se le pide**: todo lo importado entra con la categoría fija
-`"Tarjeta"` (`aCamposGuardables`), y el usuario la cambia a mano en la tabla de
-revisión si quiere.
+El modelo devuelve cuatro campos por consumo: `fecha`, `descripcion`, `monto` y
+`categoria_sugerida`, el **rubro** del comercio (Comida, Transporte,
+Suscripciones…). La lista de opciones son las categorías del sistema más las
+propias del usuario, y el esquema la restringe con un `enum`, así que el modelo
+no puede inventar una. `parsearRespuesta` la vuelve a validar igual: una que no
+exista queda en `"Otros"`. "Tarjeta" y "Ajustes tarjeta" nunca se ofrecen como
+rubro: la primera es el medio de pago (va en la **cuenta**, que en la
+importación arranca en `"Tarjeta"`) y la segunda es sólo para el ítem que netea
+impuestos. La categoría de cada fila se puede cambiar en la tabla de revisión.
 
 ### Qué se extrae y qué no
 
 Los **consumos** se importan siempre: una transacción por línea, con su comercio
-como descripción, categoría `"Tarjeta"` y tipo egreso. Si el modelo devolviera
+como descripción, la categoría por rubro que sugirió la IA, cuenta `"Tarjeta"` y
+tipo egreso. Si el modelo devolviera
 un consumo con monto negativo, `aCamposGuardables` lo toma en valor absoluto.
 La excepción son las **devoluciones y reintegros de comercios** ("DEVOLUCION
 COMPRA ZARA", "REINTEGRO PROMO SUPERMERCADO"): son créditos, así que entran
-como **ingreso** (como egreso sumarían en vez de restar; y como egreso negativo
+como **ingreso**, con el rubro del comercio (como egreso sumarían en vez de restar; y como egreso negativo
 no pueden, porque en la base sólo el ajuste de impuestos puede ser negativo).
 
 Los **impuestos y percepciones** (IIBB, PERCEP/PERCEPCION, IVA RG, DB.RG,

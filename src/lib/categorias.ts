@@ -1,6 +1,7 @@
 /**
- * Categorías de consumo: las que el usuario elige y las que la IA puede sugerir
- * para un gasto real. Para agregar/sacar una, editá sólo esta lista.
+ * Categorías de consumo del sistema: las que el usuario elige al cargar un
+ * gasto. Las que la IA puede sugerir al importar son éstas menos "Tarjeta"
+ * (ver `CATEGORIAS_SUGERIBLES`). Para agregar/sacar una, editá esta lista.
  */
 export const CATEGORIAS_CONSUMO = [
   "Comida",
@@ -31,11 +32,60 @@ export type Categoria = (typeof CATEGORIAS)[number];
 export const CATEGORIA_POR_DEFECTO: Categoria = "Otros";
 
 /**
- * Categoría fija que se asigna a TODO lo importado de un resumen de tarjeta.
- * La importación ya no pide una categoría por ítem a la IA: entra todo como
- * "Tarjeta" y el usuario recategoriza a mano en la tabla si quiere.
+ * Cuenta con la que arranca la importación de un resumen: el medio de pago.
+ * El rubro va en la categoría; que salió de la tarjeta, en la cuenta.
  */
-export const CATEGORIA_TARJETA: Categoria = "Tarjeta";
+export const CUENTA_IMPORTACION = "Tarjeta";
+
+/**
+ * Rubros del sistema que la IA puede sugerir al importar un resumen.
+ *
+ * Quedan afuera "Tarjeta", que es un medio de pago y no un rubro (va en la
+ * cuenta), y "Ajustes tarjeta", que es sólo para el ítem que netea impuestos:
+ * un consumo con esa categoría desaparecería de la torta del dashboard.
+ */
+export const CATEGORIAS_SUGERIBLES: readonly string[] = CATEGORIAS_CONSUMO.filter(
+  (c) => c !== "Tarjeta",
+);
+
+/** Nombres que nunca se aceptan como sugerencia de la IA, normalizados. */
+const NO_SUGERIBLES = new Set(
+  ["Tarjeta", CATEGORIA_AJUSTES].map((c) => c.trim().toLowerCase()),
+);
+
+/**
+ * Los rubros que se le ofrecen a la IA para un usuario: los del sistema y
+ * después sus categorías propias, sin repetidos (sin importar mayúsculas).
+ */
+export function categoriasParaSugerir(propias: readonly string[]): string[] {
+  const vistas = new Set<string>();
+  const resultado: string[] = [];
+  for (const nombre of [...CATEGORIAS_SUGERIBLES, ...propias]) {
+    const limpio = nombre.trim();
+    const clave = limpio.toLowerCase();
+    if (limpio === "" || vistas.has(clave) || NO_SUGERIBLES.has(clave)) continue;
+    vistas.add(clave);
+    resultado.push(limpio);
+  }
+  return resultado;
+}
+
+/**
+ * Valida la categoría que sugirió la IA contra las del usuario. Devuelve el
+ * nombre tal como está en la lista (así "comida" queda "Comida"); si no
+ * coincide con ninguna, o no vino, "Otros".
+ */
+export function resolverCategoria(
+  sugerida: unknown,
+  validas: readonly string[],
+): string {
+  if (typeof sugerida !== "string") return CATEGORIA_POR_DEFECTO;
+  const clave = sugerida.trim().toLowerCase();
+  if (NO_SUGERIBLES.has(clave)) return CATEGORIA_POR_DEFECTO;
+  return (
+    validas.find((v) => v.trim().toLowerCase() === clave) ?? CATEGORIA_POR_DEFECTO
+  );
+}
 
 export function esCategoriaValida(valor: unknown): valor is Categoria {
   return (

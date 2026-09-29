@@ -14,9 +14,15 @@ import {
 } from "../src/lib/extraccion.ts";
 import {
   promptExtraccion,
-  ESQUEMA_EXTRACCION,
+  esquemaExtraccion,
   PROMPT_EXTRACCION,
 } from "../src/lib/extraccion-prompt.ts";
+import {
+  CATEGORIAS_SUGERIBLES,
+  categoriasParaSugerir,
+} from "../src/lib/categorias.ts";
+
+const ESQUEMA = esquemaExtraccion(CATEGORIAS_SUGERIBLES);
 
 const json = (obj) => JSON.stringify(obj);
 
@@ -28,33 +34,50 @@ test("parsearRespuesta acepta la forma esperada", () => {
           fecha: "2026-07-03",
           descripcion: "  Verdulería  ",
           monto: 12500.5,
+          categoria_sugerida: "Comida",
         },
       ],
     }),
   );
   assert.equal(r.ok, true);
   assert.deepEqual(r.items, [
-    { fecha: "2026-07-03", descripcion: "Verdulería", monto: 12500.5 },
+    { fecha: "2026-07-03", descripcion: "Verdulería", monto: 12500.5, categoria: "Comida" },
   ]);
 });
 
-test("parsearRespuesta ignora una categoría que mande el modelo de más", () => {
-  // Ya no pedimos categoría; si el modelo la manda igual, no se guarda.
-  const r = parsearRespuesta(
-    json({
-      items: [
-        {
-          fecha: "2026-07-03",
-          descripcion: "Verdulería",
-          monto: 100,
-          categoria_sugerida: "Comida",
-        },
-      ],
-    }),
-  );
-  assert.deepEqual(r.items, [
-    { fecha: "2026-07-03", descripcion: "Verdulería", monto: 100 },
-  ]);
+const conCategoria = (categoria_sugerida) =>
+  json({
+    items: [{ fecha: "2026-07-03", descripcion: "X", monto: 100, categoria_sugerida }],
+  });
+
+test("parsearRespuesta usa la categoría que sugiere la IA si existe", () => {
+  for (const c of ["Comida", "Transporte", "Suscripciones", "Salud", "Otros"]) {
+    assert.equal(parsearRespuesta(conCategoria(c)).items[0].categoria, c);
+  }
+  // Sin importar mayúsculas: queda con el nombre tal como está en la lista.
+  assert.equal(parsearRespuesta(conCategoria("  comida ")).items[0].categoria, "Comida");
+});
+
+test("parsearRespuesta manda a Otros una categoría que no existe o no vino", () => {
+  for (const c of ["Viajes", "Supermercado", "", 42, null, undefined]) {
+    assert.equal(parsearRespuesta(conCategoria(c)).items[0].categoria, "Otros", String(c));
+  }
+});
+
+test("parsearRespuesta nunca acepta Tarjeta ni Ajustes tarjeta como rubro", () => {
+  // Tarjeta es la cuenta; Ajustes tarjeta es sólo para el ítem de impuestos.
+  for (const c of ["Tarjeta", "tarjeta", "Ajustes tarjeta"]) {
+    const validas = [...CATEGORIAS_SUGERIBLES, c]; // aunque alguien la pase
+    assert.equal(parsearRespuesta(conCategoria(c), validas).items[0].categoria, "Otros", c);
+  }
+});
+
+test("parsearRespuesta acepta las categorías propias del usuario", () => {
+  const validas = categoriasParaSugerir(["Viajes", "Mascotas"]);
+  assert.equal(parsearRespuesta(conCategoria("Viajes"), validas).items[0].categoria, "Viajes");
+  assert.equal(parsearRespuesta(conCategoria("mascotas"), validas).items[0].categoria, "Mascotas");
+  // Una propia de OTRO usuario (no está en la lista) no pasa.
+  assert.equal(parsearRespuesta(conCategoria("Gimnasio"), validas).items[0].categoria, "Otros");
 });
 
 test("parsearRespuesta no toca los montos que le llegan", () => {
@@ -108,6 +131,7 @@ const item = (extra) => ({
   fecha: "2026-06-03",
   descripcion: "SUPERMERCADO DIA",
   monto: 45230,
+  categoria: "Comida",
   ...extra,
 });
 
@@ -118,7 +142,7 @@ test("aCamposGuardables marca los consumos como egreso", () => {
     descripcion: "SUPERMERCADO DIA",
     monto: "120000.00",
     tipo: "egreso",
-    categoria: "Tarjeta",
+    categoria: "Comida",
   });
 });
 
@@ -143,13 +167,26 @@ test("aCamposGuardables deja el monto positivo y con 2 decimales", () => {
   assert.equal(aCamposGuardables(item({ monto: 0.5 })).monto, "0.50");
 });
 
-test("aCamposGuardables asigna siempre la categoría Tarjeta", () => {
-  // Ya no depende de lo que sugiera la IA: todo lo importado entra como Tarjeta.
-  assert.equal(aCamposGuardables(item()).categoria, "Tarjeta");
+test("aCamposGuardables usa la categoría por rubro, no Tarjeta fija", () => {
+  assert.equal(aCamposGuardables(item()).categoria, "Comida");
   assert.equal(
-    aCamposGuardables(item({ descripcion: "FARMACIA" })).categoria,
-    "Tarjeta",
+    aCamposGuardables(item({ descripcion: "FARMACITY", categoria: "Salud" })).categoria,
+    "Salud",
   );
+  // Si por algún motivo llega vacía, Otros (nunca Tarjeta).
+  assert.equal(aCamposGuardables(item({ categoria: "  " })).categoria, "Otros");
+});
+
+test("aCamposGuardables: una devolución es ingreso, con el rubro del comercio", () => {
+  const campos = aCamposGuardables(
+    item({ descripcion: "DEVOLUCION COMPRA ZARA", categoria: "Otros" }),
+  );
+  assert.equal(campos.tipo, "ingreso");
+  assert.equal(campos.categoria, "Otros");
+  const reintegro = aCamposGuardables(
+    item({ descripcion: "REINTEGRO PROMO SUPERMERCADO", categoria: "Comida" }),
+  );
+  assert.deepEqual([reintegro.tipo, reintegro.categoria], ["ingreso", "Comida"]);
 });
 
 test("aCamposGuardables conserva la descripción tal cual, con la cuota", () => {
@@ -469,16 +506,29 @@ test("prompt con impuestos: pide extraerlos como ítems individuales", () => {
   assert.match(p, /dos clases de línea/);
   assert.match(p, /IMPUESTOS, PERCEPCIONES Y DEVOLUCIONES/);
   assert.match(p, /NO las agrupes ni las sumes/);
-  // No se preocupa por el signo; del resto (categoría) ya no le pedimos nada.
+  // No se preocupa por el signo: de eso se ocupa el servidor.
   assert.match(p, /del signo nos ocupamos nosotros/);
 });
 
-test("ningún prompt le pide una categoría a la IA", () => {
-  // El cambio: todo lo importado entra como "Tarjeta", sin sugerencia por ítem.
+test("ambos prompts piden la categoría por rubro, con la lista", () => {
   for (const p of [promptExtraccion(false), promptExtraccion(true)]) {
-    assert.doesNotMatch(p, /categoria_sugerida/);
-    assert.doesNotMatch(p, /categoría que mejor/i);
+    assert.match(p, /categoria_sugerida/);
+    for (const c of CATEGORIAS_SUGERIBLES) {
+      assert.ok(p.includes(`"${c}"`), `el prompt debería ofrecer "${c}"`);
+    }
+    // Ni Tarjeta ni Ajustes tarjeta son opciones de rubro.
+    assert.ok(!p.includes(`"Tarjeta"`), "Tarjeta no es un rubro");
+    assert.ok(!p.includes(`"Ajustes tarjeta"`), "Ajustes tarjeta no es un rubro");
+    assert.match(p, /No inventes categorías/);
   }
+});
+
+test("el prompt ofrece las categorías propias y pide preferirlas", () => {
+  const p = promptExtraccion(false, categoriasParaSugerir(["Viajes"]));
+  assert.ok(p.includes(`"Viajes"`));
+  assert.match(p, /categorías propias/);
+  // Sin propias, no aparece esa aclaración.
+  assert.doesNotMatch(promptExtraccion(false), /categorías propias/);
 });
 
 test("ambos prompts mantienen el total del resumen", () => {
@@ -490,10 +540,10 @@ test("ambos prompts mantienen el total del resumen", () => {
 });
 
 test("el esquema pide el total por moneda, separado", () => {
-  const total = ESQUEMA_EXTRACCION.properties.total_resumen;
+  const total = ESQUEMA.properties.total_resumen;
   assert.deepEqual([...total.required], ["pesos", "dolares"]);
   assert.equal(total.additionalProperties, false);
-  assert.ok(ESQUEMA_EXTRACCION.required.includes("total_resumen"));
+  assert.ok(ESQUEMA.required.includes("total_resumen"));
 });
 
 test("parsearRespuesta devuelve el total del resumen", () => {
@@ -523,11 +573,20 @@ test("ambos prompts piden los consumos en positivo", () => {
 });
 
 test("el esquema le pide a la API exactamente los campos acordados", () => {
-  const item = ESQUEMA_EXTRACCION.properties.items.items;
-  // Ya no se pide categoría por ítem: sólo fecha, descripción y monto.
-  assert.deepEqual([...item.required], ["fecha", "descripcion", "monto"]);
+  const item = ESQUEMA.properties.items.items;
+  // fecha, descripción, monto y el rubro sugerido.
+  assert.deepEqual([...item.required], ["fecha", "descripcion", "monto", "categoria_sugerida"]);
   // additionalProperties: false es obligatorio para salida estructurada.
   assert.equal(item.additionalProperties, false);
-  assert.equal(ESQUEMA_EXTRACCION.additionalProperties, false);
-  assert.equal(item.properties.categoria_sugerida, undefined);
+  assert.equal(ESQUEMA.additionalProperties, false);
+});
+
+test("el esquema restringe la categoría a las del usuario con enum", () => {
+  const lista = categoriasParaSugerir(["Viajes"]);
+  const cat = esquemaExtraccion(lista).properties.items.items.properties.categoria_sugerida;
+  assert.equal(cat.type, "string");
+  assert.deepEqual(cat.enum, lista);
+  assert.ok(cat.enum.includes("Otros"), "Otros tiene que estar siempre: es el fallback");
+  assert.ok(!cat.enum.includes("Tarjeta"));
+  assert.ok(!cat.enum.includes("Ajustes tarjeta"));
 });

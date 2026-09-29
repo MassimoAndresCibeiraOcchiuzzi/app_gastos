@@ -1,5 +1,7 @@
 import "server-only";
 
+import { CATEGORIAS_SUGERIBLES } from "./categorias";
+
 /**
  * Lo que se le manda a Claude para extraer un resumen: el esquema de salida y
  * el prompt. Vive aparte de `extraccion.ts` porque ese módulo también lo usa
@@ -10,70 +12,113 @@ import "server-only";
 
 /**
  * Esquema de salida estructurada. Con esto la API garantiza que la respuesta es
- * JSON válido con la forma esperada. Ya no se pide categoría por ítem: todo lo
- * importado entra como "Tarjeta" (ver `aCamposGuardables`).
+ * JSON válido con la forma esperada.
+ *
+ * Es una función porque cada consumo trae una `categoria_sugerida` restringida
+ * con `enum` a las categorías de ESE usuario (las del sistema y las propias):
+ * el modelo no puede inventar una. `parsearRespuesta` la vuelve a validar
+ * igual. Un esquema nuevo (p. ej. después de crear una categoría) tiene un
+ * costo de compilación la primera vez; la API lo cachea 24 horas.
  */
-export const ESQUEMA_EXTRACCION = {
-  type: "object",
-  properties: {
-    items: {
-      type: "array",
-      description:
-        "Un elemento por consumo del resumen. Nunca líneas de saldo, pago, impuesto, percepción ni total.",
+export function esquemaExtraccion(categorias: readonly string[]) {
+  return {
+    type: "object",
+    properties: {
       items: {
+        type: "array",
+        description:
+          "Un elemento por consumo del resumen. Nunca líneas de saldo, pago, impuesto, percepción ni total.",
+        items: {
+          type: "object",
+          properties: {
+            fecha: {
+              type: "string",
+              format: "date",
+              description:
+                "Fecha de la operación original tal como figura en el resumen, en formato YYYY-MM-DD.",
+            },
+            descripcion: {
+              type: "string",
+              description:
+                "Nombre del comercio como figura en el resumen, limpio de códigos internos, pero conservando la indicación de cuota si la hay (por ejemplo 'Cuota 03/06').",
+            },
+            monto: {
+              type: "number",
+              description:
+                "Importe del consumo en pesos, SIEMPRE POSITIVO. Un resumen de tarjeta sólo genera gastos: nunca devuelvas un monto negativo.",
+            },
+            categoria_sugerida: {
+              type: "string",
+              enum: [...categorias],
+              description:
+                "El rubro del comercio, elegido de la lista. Si no estás seguro, \"Otros\".",
+            },
+          },
+          required: ["fecha", "descripcion", "monto", "categoria_sugerida"],
+          additionalProperties: false,
+        },
+      },
+      total_resumen: {
         type: "object",
+        description:
+          "El monto que el banco efectivamente debita de la cuenta, para poder verificar la suma. Sale de SALDO ACTUAL o de la línea DEBITAREMOS DE SU C.A.",
         properties: {
-          fecha: {
-            type: "string",
-            format: "date",
+          pesos: {
+            anyOf: [{ type: "number" }, { type: "null" }],
             description:
-              "Fecha de la operación original tal como figura en el resumen, en formato YYYY-MM-DD.",
+              "Total a debitar en pesos. null si el resumen no lo dice.",
           },
-          descripcion: {
-            type: "string",
+          dolares: {
+            anyOf: [{ type: "number" }, { type: "null" }],
             description:
-              "Nombre del comercio como figura en el resumen, limpio de códigos internos, pero conservando la indicación de cuota si la hay (por ejemplo 'Cuota 03/06').",
-          },
-          monto: {
-            type: "number",
-            description:
-              "Importe del consumo en pesos, SIEMPRE POSITIVO. Un resumen de tarjeta sólo genera gastos: nunca devuelvas un monto negativo.",
+              "Total a debitar en dólares. null si el resumen no opera en dólares.",
           },
         },
-        required: ["fecha", "descripcion", "monto"],
+        required: ["pesos", "dolares"],
         additionalProperties: false,
       },
     },
-    total_resumen: {
-      type: "object",
-      description:
-        "El monto que el banco efectivamente debita de la cuenta, para poder verificar la suma. Sale de SALDO ACTUAL o de la línea DEBITAREMOS DE SU C.A.",
-      properties: {
-        pesos: {
-          anyOf: [{ type: "number" }, { type: "null" }],
-          description:
-            "Total a debitar en pesos. null si el resumen no lo dice.",
-        },
-        dolares: {
-          anyOf: [{ type: "number" }, { type: "null" }],
-          description:
-            "Total a debitar en dólares. null si el resumen no opera en dólares.",
-        },
-      },
-      required: ["pesos", "dolares"],
-      additionalProperties: false,
-    },
-  },
-  required: ["items", "total_resumen"],
-  additionalProperties: false,
-} as const;
+    required: ["items", "total_resumen"],
+    additionalProperties: false,
+  } as const;
+}
+
+/**
+ * Cómo elegir la categoría de cada línea. Las del sistema llevan una guía de
+ * qué comercios van en cada una; las propias del usuario van aparte, para que
+ * el modelo las prefiera cuando el comercio encaja claramente.
+ */
+function seccionCategoria(categorias: readonly string[]): string {
+  const propias = categorias.filter((c) => !CATEGORIAS_SUGERIBLES.includes(c));
+  const lista = categorias.map((c) => JSON.stringify(c)).join(", ");
+  const conPropias =
+    propias.length > 0
+      ? `\n  El usuario creó estas categorías propias: ${propias.map((c) => JSON.stringify(c)).join(", ")}. Si el comercio encaja claramente en una de ellas, preferila antes que una general.`
+      : "";
+  return `- categoria_sugerida: el rubro del comercio, elegido SÓLO de esta lista: ${lista}. Guía para las generales:
+  · Comida: supermercados, almacenes, verdulerías, carnicerías, restaurantes, bares, cafeterías, delivery de comida.
+  · Transporte: combustible, peajes, estacionamiento, transporte público, taxis y apps de viaje.
+  · Suscripciones: streaming, música, software, apps y membresías que se cobran todos los meses.
+  · Servicios: luz, gas, agua, internet, telefonía, cable.
+  · Salud: farmacias, médicos, clínicas, prepagas, ópticas.
+  · Entretenimiento: cine, teatro, recitales, juegos, salidas.
+  · Alquiler: alquiler y expensas.
+  · Otros: lo que no encaja en ninguna, o cuando no estás seguro. No inventes categorías.${conPropias}
+  Una devolución o reintegro de un comercio lleva el rubro de ese comercio. Para impuestos y percepciones usá "Otros".`;
+}
 
 /**
  * El prompt cambia según el toggle "Incluir impuestos": con `false` sólo pide
  * consumos; con `true` pide también cada línea de impuesto/percepción como un
- * ítem más. El resto (total del resumen, fechas, formato) es igual.
+ * ítem más. El resto (total del resumen, fechas, formato, categoría) es igual.
+ *
+ * `categorias` son las del usuario (ver `categoriasParaSugerir`); tienen que
+ * ser las mismas que se le pasan a `esquemaExtraccion`.
  */
-export function promptExtraccion(incluirImpuestos: boolean): string {
+export function promptExtraccion(
+  incluirImpuestos: boolean,
+  categorias: readonly string[] = CATEGORIAS_SUGERIBLES,
+): string {
   const queExtraer = incluirImpuestos
     ? `QUÉ EXTRAER — dos clases de línea
 1. CONSUMOS: compras puntuales, con fecha, comprobante, nombre de un comercio e importe. Suelen estar bajo "DETALLE DE TRANSACCION", "DETALLE DE MOVIMIENTOS" o "CONSUMOS".
@@ -106,6 +151,7 @@ CÓMO DEVOLVER CADA LÍNEA
 - fecha: la de la operación tal como figura en la línea, en formato YYYY-MM-DD. Si sólo aparecen día y mes, deducí el año del período del resumen; si el resumen abarca dos años (por ejemplo diciembre y enero), asigná a cada uno el que corresponda. En compras en cuotas es la fecha de la compra original, que puede ser de varios meses atrás: dejala como está.
 - descripcion: el comercio (o el nombre del impuesto) como figura en el resumen, limpio de códigos internos, conservando la indicación de cuota si la hay (por ejemplo "SMARTPHONE XYZ - Cuota 03/06").
 - monto de consumos: el importe en pesos argentinos, como número POSITIVO, sin símbolos ni separadores de miles y con punto para los decimales. Los consumos son gastos: nunca devuelvas un consumo con monto negativo.${montoImpuestos}
+${seccionCategoria(categorias)}
 
 EL TOTAL DEL RESUMEN (campo total_resumen)
 Es el monto que el banco efectivamente debita, y se usa como referencia para verificar la suma. Buscalo en este orden:
@@ -120,7 +166,7 @@ CASOS PARTICULARES
 - Si el documento no es un resumen de cuenta, devolvé la lista vacía y los totales en null.`;
 }
 
-/** El prompt por defecto (sin impuestos), para el camino de visión y los tests. */
+/** El prompt por defecto (sin impuestos, sin categorías propias), para los tests. */
 export const PROMPT_EXTRACCION = promptExtraccion(false);
 
 /**
@@ -133,6 +179,7 @@ export const PROMPT_EXTRACCION = promptExtraccion(false);
 export function mensajeConTexto(
   textoDelPdf: string,
   incluirImpuestos: boolean,
+  categorias: readonly string[] = CATEGORIAS_SUGERIBLES,
 ): string {
-  return `<resumen>\n${textoDelPdf}\n</resumen>\n\n${promptExtraccion(incluirImpuestos)}\n\nTrabajá sobre el texto de arriba, que es el resumen completo tal como lo extrajimos del PDF. Los importes están tal cual figuran en el documento: copialos exactamente, sin redondear ni recalcular.`;
+  return `<resumen>\n${textoDelPdf}\n</resumen>\n\n${promptExtraccion(incluirImpuestos, categorias)}\n\nTrabajá sobre el texto de arriba, que es el resumen completo tal como lo extrajimos del PDF. Los importes están tal cual figuran en el documento: copialos exactamente, sin redondear ni recalcular.`;
 }
