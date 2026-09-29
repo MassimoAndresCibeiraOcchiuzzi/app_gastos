@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { esMesValido, nombreMes, sumarMeses } from "@/lib/formato";
 
 const FLECHA =
@@ -15,11 +15,14 @@ export default function SelectorMes({
   mesDeHoy: string;
 }) {
   const router = useRouter();
+  // Cambiar de mes te deja en la pantalla donde estás (Movimientos,
+  // Dashboard…): los links arman la URL sobre la ruta actual, no sobre "/".
+  const ruta = usePathname();
 
   return (
     <div className="flex items-center gap-2">
       <Link
-        href={`/?mes=${sumarMeses(mes, -1)}`}
+        href={`${ruta}?mes=${sumarMeses(mes, -1)}`}
         aria-label="Mes anterior"
         className={FLECHA}
       >
@@ -40,7 +43,7 @@ export default function SelectorMes({
           aria-label="Elegir mes"
           onChange={(e) => {
             if (esMesValido(e.target.value)) {
-              router.push(`/?mes=${e.target.value}`);
+              router.push(`${ruta}?mes=${e.target.value}`);
             }
           }}
           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
@@ -48,7 +51,7 @@ export default function SelectorMes({
       </div>
 
       <Link
-        href={`/?mes=${sumarMeses(mes, 1)}`}
+        href={`${ruta}?mes=${sumarMeses(mes, 1)}`}
         aria-label="Mes siguiente"
         className={FLECHA}
       >
@@ -57,7 +60,7 @@ export default function SelectorMes({
 
       {mes !== mesDeHoy && (
         <Link
-          href="/"
+          href={ruta}
           className="shrink-0 rounded-lg border border-black/15 px-3 py-1.5 text-xs transition-colors hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
         >
           Hoy
