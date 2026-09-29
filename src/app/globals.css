@@ -72,6 +72,15 @@ h2,
   border-radius: 2px;
 }
 
+/* Adentro de los gráficos de recharts no hay nada que se use con teclado:
+   son aria-hidden y fuera del orden de Tab (la versión accesible es la lista o
+   la tabla de al lado). Pero recharts les pone tabindex=-1 a sus grupos
+   internos, y al tocarlos el navegador les dibujaba su contorno de foco. */
+.recharts-wrapper :focus,
+.recharts-wrapper :focus-visible {
+  outline: none;
+}
+
 /* Desplegables nativos legibles en los dos temas: el popup y sus opciones
    heredan fondo y texto de la app, no del sistema (que en oscuro podía dar
    texto claro sobre fondo claro). Se combina con `color-scheme` y con el fondo

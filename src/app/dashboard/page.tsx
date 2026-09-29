@@ -95,7 +95,7 @@ export default async function Dashboard({
           <Tarjeta
             titulo={`Ingresos vs egresos · últimos ${MESES_COMPARADOS} meses`}
           >
-            <BarrasMeses datos={barras} />
+            <BarrasMeses datos={barras} mesSeleccionado={mes} />
           </Tarjeta>
         </div>
       )}

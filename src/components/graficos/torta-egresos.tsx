@@ -45,7 +45,10 @@ export default function TortaEgresos({
   return (
     <div className="relative" aria-hidden>
       <ResponsiveContainer width="100%" height={210}>
-        <PieChart>
+        {/* Sin la capa de accesibilidad de recharts: haría el SVG enfocable
+            adentro de este contenedor aria-hidden. La versión accesible es la
+            lista de categorías, que son botones. */}
+        <PieChart accessibilityLayer={false}>
           <Pie
             data={porciones}
             dataKey="monto"
@@ -55,6 +58,9 @@ export default function TortaEgresos({
             paddingAngle={porciones.length > 1 ? 2 : 0}
             stroke="none"
             isAnimationActive={false}
+            // Fuera del orden de Tab (recharts lo pone en 0): el control
+            // accesible es la lista de categorías.
+            rootTabIndex={-1}
             onMouseEnter={(_, i) => onResaltar(i)}
             onMouseLeave={() => onResaltar(null)}
             onClick={(_, i) => onElegir(i)}
