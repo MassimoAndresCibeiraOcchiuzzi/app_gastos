@@ -113,6 +113,18 @@ export async function eliminarCategoria(
     console.error("[categorias] no se pudieron borrar sus reglas:", errorReglas.message);
   }
 
+  // Lo mismo con su presupuesto: sin la categoría no hay qué presupuestar.
+  const { error: errorPresupuesto } = await supabase
+    .from("presupuestos")
+    .delete()
+    .eq("categoria", categoria.nombre);
+  if (errorPresupuesto) {
+    console.error(
+      "[categorias] no se pudo borrar su presupuesto:",
+      errorPresupuesto.message,
+    );
+  }
+
   revalidar();
   return { ok: true };
 }

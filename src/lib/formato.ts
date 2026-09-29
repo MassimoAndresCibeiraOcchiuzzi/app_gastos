@@ -128,6 +128,15 @@ export function rangoMes(mes: string): { desde: string; hasta: string } {
   return { desde: primerDia(mes), hasta: primerDia(sumarMeses(mes, 1)) };
 }
 
+/** Cuántos días tiene un mes "YYYY-MM" (28 a 31). */
+export function diasDelMes(mes: string): number {
+  const anio = Number(mes.slice(0, 4));
+  const numeroMes = Number(mes.slice(5, 7));
+  // Día 0 del mes siguiente = último día de éste. UTC para no depender del
+  // huso del servidor.
+  return new Date(Date.UTC(anio, numeroMes, 0)).getUTCDate();
+}
+
 export function sumarMeses(mes: string, delta: number): string {
   const anio = Number(mes.slice(0, 4));
   const numeroMes = Number(mes.slice(5, 7));

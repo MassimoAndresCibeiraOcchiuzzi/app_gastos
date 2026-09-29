@@ -109,6 +109,36 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
       dice "categoría por tu regla"
 - [x] Las reglas se ven y se borran en el modal "Categorías"
 
+**Fase 8 — Presupuestos**
+
+- [x] Tabla `presupuestos` con RLS (SQL en `supabase/presupuestos.sql`)
+- [x] Tarjeta "Presupuestos" en el Dashboard: gastado de cada tope (monto y %)
+      contra cuánto pasó del mes, con una marca de "hoy" en cada barra
+- [x] Aviso ámbar si una categoría va más rápido que el mes (o se pasó)
+- [x] "Editar" en la misma tarjeta: un campo por categoría, vacío = sin tope
+- [x] Las categorías sin presupuesto no cambian en la torta ni en la lista
+
+### Sobre los presupuestos
+
+Un presupuesto es un tope **mensual fijo** por categoría: el mismo todos los
+meses. Cambiarlo cambia también cómo se ven los meses pasados. Lo gastado es
+lo mismo que muestra la torta para esa categoría: egresos del mes, sin restar
+devoluciones (que van aparte en el detalle).
+
+El ritmo es lineal: el día 12 de un mes de 30 "pasó el 40%". Una categoría va
+**más rápido que el mes** si lo gastado supera ese porcentaje por más de 10
+puntos (`MARGEN_RITMO`); sin margen, el día 1 cualquier compra dispararía el
+aviso. En un mes cerrado no hay ritmo: sólo se avisa si se pasó del tope.
+
+El modelo lineal se equivoca con gastos que caen de golpe: el alquiler se paga
+entero a principio de mes, y lo importado de un resumen se registra el día 1.
+Esas categorías van a aparecer "adelantadas" en la primera parte del mes
+aunque estén bien.
+
+Se editan en el Dashboard y no en el modal de Categorías: ese modal está en
+Movimientos y sólo lista las propias, y los presupuestos también van en las
+del sistema. Así se definen donde se miran.
+
 ### Sobre las reglas por comercio
 
 El patrón de una regla es el nombre del comercio normalizado con la misma
@@ -462,6 +492,9 @@ Y [`supabase/resumenes_importados.sql`](supabase/resumenes_importados.sql), para
 avisar cuando subís un resumen que ya importaste (sin ella se importa igual,
 pero sin el aviso).
 
+Y [`supabase/presupuestos.sql`](supabase/presupuestos.sql), para los
+presupuestos. Sin ella el Dashboard funciona igual y la tarjeta avisa que falta.
+
 Y [`supabase/reglas_categoria.sql`](supabase/reglas_categoria.sql), para las
 reglas por comercio. Sin ella todo funciona igual, pero "Aplicar siempre a
 este comercio" avisa que no pudo guardar la regla.
@@ -493,12 +526,15 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/app/auth/callback/route.ts` | Canje del `?code=` del magic link (PKCE) |
 | `src/app/auth/confirm/route.ts` | Alternativa con `token_hash` (ver abajo) |
 | `src/app/page.tsx` | Movimientos: resumen + alta + lista del mes |
-| `src/app/dashboard/page.tsx` | Dashboard: torta con lista de categorías y barras de 6 meses |
+| `src/app/dashboard/page.tsx` | Dashboard: presupuestos, torta con lista de categorías, medios de pago y barras de 6 meses |
 | `src/components/categorias-mes.tsx` | Lista interactiva de categorías y su detalle desplegable |
 | `src/components/numero-principal.tsx` | "Gastaste $X en [mes]", comparación y balance |
 | `src/components/indicador-comparacion.tsx` | El ▲/▼ % contra el promedio, compartido |
 | `src/lib/dashboard.ts` | Filas, comparación contra el promedio, detalle de cada categoría, número principal y reparto por cuenta |
 | `src/app/actions/transacciones.ts` | Server actions de alta, edición, borrado e importación |
+| `src/app/actions/presupuestos.ts` | Server action que guarda el formulario de presupuestos |
+| `src/lib/presupuestos.ts` | Avance del mes, progreso y validación de presupuestos (puro, testeado) |
+| `src/components/presupuestos-mes.tsx` | Tarjeta de presupuestos del Dashboard y su editor |
 | `src/app/actions/reglas.ts` | Server action de borrar una regla por comercio |
 | `src/lib/reglas.ts` | Patrón de comercio, búsqueda y aplicación de reglas (puro, testeado) |
 | `src/lib/reglas-servidor.ts` | Guardado de reglas (upsert), sólo servidor |
@@ -536,6 +572,7 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `supabase/checks_transacciones.sql` | CHECK constraints de `transacciones` |
 | `supabase/resumenes_importados.sql` | Hashes de los PDF importados, para avisar repetidos |
 | `supabase/diagnostico_checks.sql` | Qué filas existentes violarían esos CHECKs (sólo lectura) |
+| `supabase/presupuestos.sql` | Presupuestos mensuales por categoría + políticas RLS |
 | `supabase/reglas_categoria.sql` | Reglas de categoría por comercio + políticas RLS |
 
 ## Cómo agregar una funcionalidad nueva
