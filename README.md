@@ -113,7 +113,8 @@ sí conviene revisar los importes con atención.
 
 Usa **salida estructurada** (`output_config.format` con un JSON Schema), así que
 la API garantiza que la respuesta es JSON válido. El esquema y el prompt están en
-`src/lib/extraccion.ts`.
+`src/lib/extraccion-prompt.ts`, marcado `server-only` para que no viajen al
+navegador.
 
 El modelo devuelve tres campos por consumo (`fecha`, `descripcion`, `monto`). La
 **categoría no se le pide**: todo lo importado entra con la categoría fija
@@ -216,8 +217,17 @@ Modelo `claude-opus-4-8` con esfuerzo `high` — leer mal un monto ensucia todos
 los totales, así que preferimos la precisión a la latencia. Ambos son constantes
 al principio de la route.
 
-Límites: 4 MB por PDF (Vercel corta los bodies en 4,5 MB) y 500 filas por
-importación.
+Límites: 4 MB por PDF (Vercel corta los bodies en 4,5 MB), 500 filas por
+importación y **10 importaciones por usuario cada 24 horas**. El tamaño se
+rechaza con el header `Content-Length`, antes de leer el cuerpo, y que sea un PDF
+se comprueba por sus primeros bytes (`%PDF-`), no por el tipo que declara el
+navegador. El límite diario lo lleva la tabla `importaciones`
+([`supabase/importaciones.sql`](supabase/importaciones.sql)): la función
+`registrar_importacion` chequea y registra el intento en un solo paso, justo
+antes de llamar a Claude. Un archivo rechazado por tamaño o formato no descuenta
+del cupo; uno que pasa esos controles sí, aunque después falle. Si la tabla no existe
+o el chequeo falla, la importación se rechaza (sin límite no se gasta). Las
+constantes están en `src/lib/importacion.ts`.
 
 ### Sobre el CSV
 
@@ -312,7 +322,9 @@ Abrir Supabase Dashboard → **SQL Editor** → New query, pegar el contenido de
 [`supabase/schema.sql`](supabase/schema.sql) y ejecutar. Después, otra query con
 [`supabase/categorias.sql`](supabase/categorias.sql) para la tabla de categorías
 personalizadas (si no la corrés, la app funciona igual pero sólo con las 8 del
-sistema).
+sistema). Y una tercera con
+[`supabase/importaciones.sql`](supabase/importaciones.sql), el límite diario de
+importaciones: **sin ella la importación de PDF queda deshabilitada**.
 
 ### 3. Configurar las URLs de Auth
 
@@ -351,7 +363,9 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/lib/csv.ts` | Armado y escapado del CSV |
 | `src/app/importar/page.tsx` | Pantalla de importación de resúmenes |
 | `src/app/api/importar/route.ts` | Manda el PDF a Claude y devuelve los movimientos |
-| `src/lib/extraccion.ts` | Prompt, esquema de salida y validación de la respuesta |
+| `src/lib/extraccion-prompt.ts` | Prompt y esquema de salida (sólo servidor) |
+| `src/lib/extraccion.ts` | Clasificación y validación de la respuesta |
+| `src/lib/importacion.ts` | Límites de la importación: tamaño, firma PDF, cupo diario |
 | `src/lib/validacion.ts` | Qué es una transacción válida (alta manual e importación) |
 | `src/components/` | Selector de mes, resumen, formulario, lista, navegación |
 | `src/components/graficos/` | Torta y barras (recharts) |
@@ -364,6 +378,7 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `public/sw.js` | Service worker (fallback offline) |
 | `supabase/schema.sql` | Tabla `transacciones` + políticas RLS |
 | `supabase/categorias.sql` | Tabla `categorias` (personalizadas) + políticas RLS |
+| `supabase/importaciones.sql` | Tabla `importaciones` + RLS + función del límite diario |
 
 ## Cómo agregar una funcionalidad nueva
 

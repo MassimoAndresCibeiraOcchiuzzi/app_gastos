@@ -1,22 +1,26 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { clasificarItems, parsearRespuesta, type Metodo } from "@/lib/extraccion";
 import {
   ESQUEMA_EXTRACCION,
-  clasificarItems,
   mensajeConTexto,
-  parsearRespuesta,
   promptExtraccion,
-  type Metodo,
-} from "@/lib/extraccion";
+} from "@/lib/extraccion-prompt";
+import {
+  LARGO_FIRMA_PDF,
+  LIMITE_IMPORTACIONES,
+  MAX_BYTES,
+  VENTANA_HORAS,
+  esPdf,
+  mensajeLimite,
+  revisarContentLength,
+} from "@/lib/importacion";
 import { MAX_CARACTERES, extraerTexto } from "@/lib/pdf";
 
 // Runtime Node explícito: la extracción de PDF (unpdf/pdfjs) y el SDK de
 // Anthropic usan APIs de Node que el runtime Edge no tiene.
 export const runtime = "nodejs";
-
-/** Vercel corta los request bodies en 4.5 MB; nos quedamos abajo. */
-const MAX_BYTES = 4 * 1024 * 1024;
 
 const MODELO = "claude-opus-4-8";
 /**
@@ -45,7 +49,17 @@ export async function POST(request: NextRequest) {
     return error("Falta configurar ANTHROPIC_API_KEY en el servidor.", 500);
   }
 
-  // 2. El archivo y el toggle de impuestos.
+  // 2. Tamaño, antes de leer el cuerpo. `formData()` carga todo en memoria,
+  //    así que un archivo gigante se rechaza acá, con el header, y no después.
+  const tamano = revisarContentLength(request.headers.get("content-length"));
+  if (tamano === "falta") {
+    return error("No pudimos determinar el tamaño del archivo.", 411);
+  }
+  if (tamano === "excede") {
+    return error("El PDF pesa más de 4 MB, que es el máximo.", 413);
+  }
+
+  // 3. El archivo y el toggle de impuestos.
   let archivo: File | null = null;
   let incluirImpuestos = false;
   try {
@@ -59,15 +73,45 @@ export async function POST(request: NextRequest) {
 
   if (!archivo) return error("Elegí un archivo PDF.", 400);
 
-  if (archivo.type !== "application/pdf") {
-    return error("El archivo tiene que ser un PDF.", 400);
-  }
-
   if (archivo.size === 0) return error("El PDF está vacío.", 400);
 
+  // Segundo control, ya con el archivo: el Content-Length cubre el cuerpo
+  // entero (con el margen del multipart), esto el archivo en sí.
   if (archivo.size > MAX_BYTES) {
     const mb = (archivo.size / 1024 / 1024).toFixed(1);
     return error(`El PDF pesa ${mb} MB y el máximo son 4 MB.`, 413);
+  }
+
+  // Que sea un PDF lo dicen sus primeros bytes, no el `type`: ese lo pone el
+  // navegador y se puede falsear.
+  const firma = new Uint8Array(
+    await archivo.slice(0, LARGO_FIRMA_PDF).arrayBuffer(),
+  );
+  if (!esPdf(firma)) return error("El archivo tiene que ser un PDF.", 400);
+
+  // 4. Límite de uso. Recién acá, con un PDF válido en la mano: un archivo
+  //    rechazado arriba no gasta nada y no descuenta del cupo. La función
+  //    SQL chequea y registra en un solo paso (ver supabase/importaciones.sql).
+  //    Si el chequeo falla, no se sigue: sin límite no se gasta.
+  const { data: cupo, error: errorCupo } = await supabase.rpc(
+    "registrar_importacion",
+    { limite: LIMITE_IMPORTACIONES, ventana: `${VENTANA_HORAS} hours` },
+  );
+
+  if (errorCupo) {
+    console.error("[importar] no se pudo verificar el límite de uso:", errorCupo);
+    return error(
+      "No pudimos verificar tu límite de importaciones. Probá de nuevo en un rato.",
+      503,
+    );
+  }
+
+  const fila = (Array.isArray(cupo) ? cupo[0] : cupo) as
+    | { permitido: boolean; disponible_desde: string | null }
+    | undefined;
+
+  if (!fila?.permitido) {
+    return error(mensajeLimite(fila?.disponible_desde ?? null), 429);
   }
 
   // De acá en adelante todo va en un try/catch: si algo explota (la extracción
@@ -77,7 +121,7 @@ export async function POST(request: NextRequest) {
   try {
     const bytes = new Uint8Array(await archivo.arrayBuffer());
 
-    // 3. Texto plano primero. Es más preciso con los importes (los caracteres
+    // 5. Texto plano primero. Es más preciso con los importes (los caracteres
     //    salen del PDF, no de la lectura de una imagen) y gasta mucho menos.
     //    Si el PDF está escaneado no hay texto y caemos a visión.
     const extraido = await extraerTexto(bytes);
@@ -119,7 +163,7 @@ export async function POST(request: NextRequest) {
           { type: "text", text: promptExtraccion(incluirImpuestos) },
         ];
 
-    // 4. Claude.
+    // 6. Claude.
     const anthropic = new Anthropic();
     let respuesta;
 
