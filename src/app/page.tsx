@@ -67,8 +67,8 @@ export default async function Home({
 
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-medium">Movimientos del mes</h2>
-          {/* Exporta todo el historial, no sólo el mes que estás viendo. */}
-          <BotonExportar />
+          {/* Exporta el mes que estás viendo, otro mes o todo el historial. */}
+          <BotonExportar mes={mes} />
         </div>
 
         {error ? (

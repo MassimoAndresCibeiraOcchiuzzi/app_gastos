@@ -73,9 +73,10 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
 
 **Fase 4**
 
-- [x] Botón "Exportar historial" en Movimientos
-- [x] CSV con todo el historial del usuario (no sólo el mes visible)
-- [x] Nombre con la fecha: `gastos_2026-07-23.csv`
+- [x] Botón "Exportar" en Movimientos, con elección del período: el mes que
+      estás viendo (por defecto), un mes específico o todo el historial
+- [x] Nombre según el período: `gastos_septiembre_2026.csv` para un mes,
+      `gastos_2026-07-23.csv` (fecha de exportación) para todo el historial
 - [x] Descarga común en la compu, hoja de compartir en el celular
 
 **Fase 5**
@@ -420,6 +421,10 @@ constantes están en `src/lib/importacion.ts`.
 
 ### Sobre el CSV
 
+`/api/exportar` sin parámetros devuelve todo el historial; con `?mes=YYYY-MM`,
+sólo ese mes (un mes inválido da 400, nunca "todo" en su lugar). El período
+sólo cambia qué filas entran: las columnas y el formato son siempre los mismos.
+
 Columnas: `fecha, descripcion, monto, tipo, categoria, cuenta, origen`. Los
 montos van con punto decimal y siempre 2 decimales (`1234.50`), sin separador de
 miles, que es lo que lee cualquier programa. El archivo sale con BOM para que
@@ -619,7 +624,7 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/components/selector-categoria.tsx` | Selector de categoría con alta inline |
 | `src/components/use-categorias.ts` | Estado compartido de categorías propias |
 | `src/components/gestor-categorias.tsx` | Modal para ver y borrar las propias y las reglas por comercio |
-| `src/app/api/exportar/route.ts` | Genera y sirve el CSV del historial |
+| `src/app/api/exportar/route.ts` | Genera y sirve el CSV (un mes o todo el historial) |
 | `src/lib/csv.ts` | Armado y escapado del CSV |
 | `src/app/importar/page.tsx` | Pantalla de importación de resúmenes |
 | `src/app/api/importar/route.ts` | Manda el PDF a Claude y devuelve los movimientos |
