@@ -44,7 +44,9 @@ export default async function Home({
       <Navegacion mes={mes} />
       <SelectorMes mes={mes} mesDeHoy={mesDeHoy} />
 
-      <ResumenMes ingresos={ingresos} egresos={egresos} />
+      {/* Con error, las filas pueden estar incompletas: mejor sin totales
+          que con unos que parecen buenos. El aviso va abajo, en la lista. */}
+      {!error && <ResumenMes ingresos={ingresos} egresos={egresos} />}
 
       <PanelAlta
         fechaPorDefecto={mes === mesDeHoy ? hoyISO() : desde}

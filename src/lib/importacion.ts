@@ -69,3 +69,42 @@ export function mensajeLimite(disponibleDesde: string | null): string {
   const dd = (valor: string) => valor.padStart(2, "0");
   return `${base} Vas a poder importar de nuevo a partir de las ${dd(partes.hour)}:${dd(partes.minute)} del ${dd(partes.day)}/${dd(partes.month)}.`;
 }
+
+/**
+ * SHA-256 de los bytes del PDF, en hex. Identifica al archivo exacto para
+ * avisar si ya se importó. Usa Web Crypto, que está en Node y en el navegador.
+ */
+export async function hashSha256(bytes: Uint8Array): Promise<string> {
+  // Copia a un ArrayBuffer propio: `digest` no acepta vistas sobre un
+  // SharedArrayBuffer y así el tipo queda claro.
+  const copia = bytes.slice().buffer;
+  const digest = await crypto.subtle.digest("SHA-256", copia);
+  return Array.from(new Uint8Array(digest), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+/** Un hash como los que genera `hashSha256` (y exige el CHECK de la tabla). */
+export function esHashValido(valor: unknown): valor is string {
+  return typeof valor === "string" && /^[0-9a-f]{64}$/.test(valor);
+}
+
+const FORMATO_FECHA = new Intl.DateTimeFormat("es-AR", {
+  timeZone: ZONA_HORARIA,
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+/** "Este resumen ya fue importado el 03/09/2026. ¿Querés continuar igual?" */
+export function mensajeDuplicado(importadoEl: string | null): string {
+  const fecha = importadoEl ? new Date(importadoEl) : null;
+  if (!fecha || Number.isNaN(fecha.getTime())) {
+    return "Este resumen ya fue importado antes. ¿Querés continuar igual?";
+  }
+  const partes = Object.fromEntries(
+    FORMATO_FECHA.formatToParts(fecha).map((p) => [p.type, p.value]),
+  );
+  const dd = (valor: string) => valor.padStart(2, "0");
+  return `Este resumen ya fue importado el ${dd(partes.day)}/${dd(partes.month)}/${partes.year}. ¿Querés continuar igual?`;
+}

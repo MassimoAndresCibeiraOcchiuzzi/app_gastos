@@ -111,7 +111,7 @@ const item = (extra) => ({
   ...extra,
 });
 
-test("aCamposGuardables marca todo como egreso", () => {
+test("aCamposGuardables marca los consumos como egreso", () => {
   assert.equal(aCamposGuardables(item()).tipo, "egreso");
   // Aunque el modelo se mande un negativo: nunca fabricamos un ingreso.
   assert.deepEqual(aCamposGuardables(item({ monto: -120000 })), {
@@ -120,6 +120,21 @@ test("aCamposGuardables marca todo como egreso", () => {
     tipo: "egreso",
     categoria: "Tarjeta",
   });
+});
+
+test("aCamposGuardables carga devoluciones y reintegros como ingreso", () => {
+  // Son créditos: como egreso sumarían en vez de restar.
+  for (const descripcion of [
+    "DEVOLUCION COMPRA ZARA",
+    "REINTEGRO PROMO SUPERMERCADO",
+    "Devolución Mercado Libre",
+  ]) {
+    const campos = aCamposGuardables(item({ descripcion, monto: 5000 }));
+    assert.equal(campos.tipo, "ingreso", descripcion);
+    assert.equal(campos.monto, "5000.00");
+  }
+  // Una palabra que sólo empieza igual no cuenta.
+  assert.equal(aCamposGuardables(item({ descripcion: "REINTEGROSA SRL" })).tipo, "egreso");
 });
 
 test("aCamposGuardables deja el monto positivo y con 2 decimales", () => {
@@ -180,15 +195,19 @@ test("motivoDeImpuesto reconoce impuestos, percepciones y devoluciones", () => {
   const casos = [
     ["IIBB PERCEPCION CABA", "IIBB"],
     ["IIBB PERCEP-CABA", "IIBB"],
-    ["PERCEPCION RG 4815", "PERCEP"],
+    ["PERCEPCION RG 4815", "PERCEPCION"],
+    ["PERCEP. IIBB BS AS", "IIBB"],
+    ["PERCEP. RG 5617", "PERCEP"],
     ["IVA RG 4240 CONSUMOS", "IVA RG"],
     ["IVA RG 4240 21%", "IVA RG"],
     ["DB.RG 4815 RENTAS", "DB.RG"],
     ["DB.RG 5617 30%", "DB.RG"],
     ["DEV. IMP. LEY 25413", "DEV.IMP"],
     ["DEV.IMP. RG 5617 30%", "DEV.IMP"],
-    ["DEVOLUCION IMPUESTO LEY", "DEVOLUCION IMP"],
-    ["REINTEGRO IVA LEY 27253", "REINTEGRO"],
+    ["DEVOLUCION IMPUESTO LEY", "DEVOLUCION IMPUESTO"],
+    ["DEVOLUCION IMP. LEY 25413", "DEVOLUCION IMP"],
+    ["DEVIMP RG 5617", "DEV.IMP"],
+    ["REINTEGRO IVA LEY 27253", "REINTEGRO IVA"],
     ["IMP. LEY 25413 DEBITOS", "IMP. LEY"],
   ];
   for (const [descripcion, motivo] of casos) {
@@ -227,12 +246,29 @@ test("motivoDeImpuesto/motivoDeExclusion dejan pasar los consumos de verdad", ()
   }
 });
 
-test("limitación conocida: la coincidencia es por subcadena", () => {
-  // "PERCEP" está para agarrar PERCEPCION/PERCEPCIONES, pero se lleva puesta
-  // cualquier palabra que empiece igual. Cae en impuestos, no en ruido; el
-  // panel de la tabla lo deja a la vista.
-  assert.equal(motivoDeExclusion("IMPRENTA LA PERCEPTIVA"), null);
-  assert.equal(motivoDeImpuesto("IMPRENTA LA PERCEPTIVA"), "PERCEP");
+test("la coincidencia es por palabra completa, no por pedazo de palabra", () => {
+  // Antes se comparaba por subcadena y todos estos se descartaban.
+  const consumos = [
+    "DEVOLUCION COMPRA ZARA",
+    "REINTEGRO PROMO SUPERMERCADO",
+    "MERCADOPAGO*PERCEPTRON",
+    "IMPRENTA LA PERCEPTIVA",
+    "FARMACIA SALDO ACTUALIZADO",
+    "RESTO SU PAGODA",
+  ];
+  for (const d of consumos) {
+    assert.equal(motivoDeExclusion(d), null, `no debería ser ruido "${d}"`);
+    assert.equal(motivoDeImpuesto(d), null, `no debería ser impuesto "${d}"`);
+  }
+});
+
+test("la puntuación del banco no importa: se comparan las palabras pegadas", () => {
+  for (const d of ["DEV. IMP. RG", "DEV.IMP RG", "DEVIMP RG", "Dev Imp RG"]) {
+    assert.equal(motivoDeImpuesto(d), "DEV.IMP", d);
+  }
+  for (const d of ["SUPAGO EN PESOS", "Su Pago", "SU-PAGO"]) {
+    assert.equal(motivoDeExclusion(d), "SU PAGO", d);
+  }
 });
 
 test("cada palabra de las listas se detecta a sí misma", () => {
@@ -259,6 +295,24 @@ test("sin incluir impuestos: consumos pasan, todo lo demás se descarta", () => 
   assert.deepEqual(consumos.map((c) => c.descripcion), ["SUPERMERCADO DIA", "YPF 1120"]);
   assert.equal(ajuste, null);
   assert.deepEqual(descartados.map((d) => d.motivo), ["SU PAGO", "IIBB", "DEV.IMP"]);
+  // Traen fecha y monto: la revisión los muestra como filas destildadas.
+  assert.deepEqual(
+    { fecha: descartados[1].fecha, monto: descartados[1].monto },
+    { fecha: "2026-06-30", monto: 4221.15 },
+  );
+});
+
+test("una devolución de comercio es un consumo, no un impuesto", () => {
+  const items = [
+    { fecha: "2026-06-03", descripcion: "DEVOLUCION COMPRA ZARA", monto: 15000 },
+    { fecha: "2026-06-04", descripcion: "REINTEGRO IVA LEY 27253", monto: 300 },
+  ];
+  for (const incluir of [false, true]) {
+    const { consumos } = clasificarItems(items, incluir);
+    assert.deepEqual(consumos.map((c) => c.descripcion), ["DEVOLUCION COMPRA ZARA"]);
+  }
+  // Con impuestos, el reintegro de IVA resta del ajuste.
+  assert.equal(clasificarItems(items, true).ajuste.neto, -300);
 });
 
 test("el ruido le gana al impuesto en la misma línea", () => {

@@ -19,6 +19,14 @@ type Opciones = {
  * Trae las transacciones del usuario, paginando.
  * Sin la paginación, a partir de las 1000 filas PostgREST corta la respuesta
  * sin avisar y los totales darían mal de forma silenciosa.
+ *
+ * El orden tiene que ser total para que las páginas no se pisen: todo lo
+ * importado de un resumen comparte fecha (día 1) y `created_at` (`now()` es
+ * la hora de inicio de la transacción, igual para todo el insert). Sin el
+ * desempate por `id`, dos páginas podían repetir o saltearse filas.
+ *
+ * Si se llega a MAX_PAGINAS con la última página llena, puede haber más: se
+ * devuelve un error en vez de totales incompletos que parezcan buenos.
  */
 export async function traerTransacciones({
   desde,
@@ -41,6 +49,7 @@ export async function traerTransacciones({
     const { data, error } = await consulta
       .order("fecha", { ascending: ascendente })
       .order("created_at", { ascending: ascendente })
+      .order("id", { ascending: ascendente })
       .range(inicio, inicio + POR_PAGINA - 1);
 
     if (error) return { transacciones: filas, error: error.message };
@@ -48,10 +57,15 @@ export async function traerTransacciones({
     // `numeric` puede llegar como string según el driver: lo normalizamos acá.
     filas.push(...(data ?? []).map((t) => ({ ...t, monto: Number(t.monto) })));
 
-    if ((data?.length ?? 0) < POR_PAGINA) break;
+    if ((data?.length ?? 0) < POR_PAGINA) {
+      return { transacciones: filas, error: null };
+    }
   }
 
-  return { transacciones: filas, error: null };
+  return {
+    transacciones: filas,
+    error: `Hay ${(MAX_PAGINAS * POR_PAGINA).toLocaleString("es-AR")} transacciones o más en este rango, más de las que se pueden traer de una vez. Los totales estarían incompletos, así que no se muestran.`,
+  };
 }
 
 /**

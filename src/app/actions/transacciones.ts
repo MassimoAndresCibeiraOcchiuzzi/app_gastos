@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { EstadoFormulario } from "@/lib/formulario";
+import { esHashValido } from "@/lib/importacion";
 import {
   aFilaTransaccion,
   validarTransaccion,
@@ -55,9 +56,15 @@ export type ResultadoImportacion =
  * Inserta las filas que el usuario confirmó en la pantalla de importación.
  * Revalida todo lo que viene del cliente: que ya haya pasado por la tabla de
  * revisión no lo vuelve confiable.
+ *
+ * `hashResumen` es el SHA-256 del PDF que calculó /api/importar. Se registra
+ * después de guardar las filas, para avisar si el mismo archivo se vuelve a
+ * subir. Lo manda el cliente, así que en el peor caso alguien falsea su propio
+ * historial de avisos: no toca montos ni datos de nadie más.
  */
 export async function importarTransacciones(
   entradas: EntradaTransaccion[],
+  hashResumen?: string,
 ): Promise<ResultadoImportacion> {
   if (!Array.isArray(entradas) || entradas.length === 0) {
     return { ok: false, error: "No hay filas para importar." };
@@ -91,6 +98,20 @@ export async function importarTransacciones(
 
   const { error } = await supabase.from("transacciones").insert(filas);
   if (error) return { ok: false, error: error.message };
+
+  // Las filas ya están guardadas: si registrar el hash falla, la importación
+  // igual salió bien. Sólo se pierde el aviso de repetido para este archivo.
+  if (esHashValido(hashResumen)) {
+    const { error: errorHash } = await supabase
+      .from("resumenes_importados")
+      .upsert(
+        { hash: hashResumen, usuario_id: user.id },
+        { onConflict: "usuario_id,hash", ignoreDuplicates: true },
+      );
+    if (errorHash) {
+      console.error("[importar] no se pudo registrar el hash del resumen:", errorHash);
+    }
+  }
 
   revalidar();
   return { ok: true, importadas: filas.length };
