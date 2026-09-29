@@ -118,6 +118,38 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
 - [x] "Editar" en la misma tarjeta: un campo por categoría, vacío = sin tope
 - [x] Las categorías sin presupuesto no cambian en la torta ni en la lista
 
+**Fase 9 — Meta de ahorro**
+
+- [x] Tabla `metas_ahorro` con RLS, una meta por usuario (SQL en
+      `supabase/metas_ahorro.sql`)
+- [x] Tarjeta "Meta de ahorro" en el Dashboard: crear, editar y borrar
+- [x] Ahorro acumulado: suma del balance de cada mes desde el inicio, con el
+      mes en curso a medias
+- [x] Cuánto falta, cuánto por mes de acá en adelante, ritmo reciente y fecha
+      estimada (adelantado / a tiempo / atrasado)
+
+### Sobre la meta de ahorro
+
+El **acumulado** es la suma de ingresos − egresos de cada mes, desde el mes de
+`fecha_inicio` (entero: lo importado de un resumen cae el día 1) hasta el
+actual, con lo que lleve cargado. Un mes con plata de sobra suma y uno en rojo
+resta; nada se resetea. Se calcula siempre al día de hoy, sin importar qué mes
+esté elegido en el selector.
+
+- **Por mes, de acá en adelante:** lo que falta dividido por los meses que van
+  del que viene al de la fecha objetivo, inclusive. El mes actual no cuenta:
+  su balance ya está (a medias) en el acumulado.
+- **Ritmo reciente:** promedio del balance de los meses completos, de los
+  últimos 6, que tienen al menos un movimiento. Un mes vacío seguramente no se
+  cargó, y promediarlo como $0 bajaría el ritmo sin razón. Con menos de 3 no
+  se proyecta.
+- **Fecha estimada:** el mes en que, a ese ritmo, lo que falta se completa.
+  Antes del mes objetivo = adelantado; el mismo mes = a tiempo; después =
+  atrasado.
+
+Todo depende de que estén cargados **todos** los ingresos y egresos reales: si
+falta el sueldo de un mes, ese mes resta como si se hubiera gastado.
+
 ### Sobre los presupuestos
 
 Un presupuesto es un tope **mensual fijo** por categoría: el mismo todos los
@@ -495,6 +527,9 @@ pero sin el aviso).
 Y [`supabase/presupuestos.sql`](supabase/presupuestos.sql), para los
 presupuestos. Sin ella el Dashboard funciona igual y la tarjeta avisa que falta.
 
+Y [`supabase/metas_ahorro.sql`](supabase/metas_ahorro.sql), para la meta de
+ahorro. Sin ella el Dashboard funciona igual y la tarjeta avisa que falta.
+
 Y [`supabase/reglas_categoria.sql`](supabase/reglas_categoria.sql), para las
 reglas por comercio. Sin ella todo funciona igual, pero "Aplicar siempre a
 este comercio" avisa que no pudo guardar la regla.
@@ -526,12 +561,15 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/app/auth/callback/route.ts` | Canje del `?code=` del magic link (PKCE) |
 | `src/app/auth/confirm/route.ts` | Alternativa con `token_hash` (ver abajo) |
 | `src/app/page.tsx` | Movimientos: resumen + alta + lista del mes |
-| `src/app/dashboard/page.tsx` | Dashboard: presupuestos, torta con lista de categorías, medios de pago y barras de 6 meses |
+| `src/app/dashboard/page.tsx` | Dashboard: presupuestos, meta de ahorro, torta con lista de categorías, medios de pago y barras de 6 meses |
 | `src/components/categorias-mes.tsx` | Lista interactiva de categorías y su detalle desplegable |
 | `src/components/numero-principal.tsx` | "Gastaste $X en [mes]", comparación y balance |
 | `src/components/indicador-comparacion.tsx` | El ▲/▼ % contra el promedio, compartido |
 | `src/lib/dashboard.ts` | Filas, comparación contra el promedio, detalle de cada categoría, número principal y reparto por cuenta |
 | `src/app/actions/transacciones.ts` | Server actions de alta, edición, borrado e importación |
+| `src/app/actions/metas.ts` | Server actions de guardar y borrar la meta de ahorro |
+| `src/lib/metas.ts` | Acumulado, ritmo, proyección y validación de la meta (puro, testeado) |
+| `src/components/meta-ahorro.tsx` | Tarjeta de la meta en el Dashboard y su formulario |
 | `src/app/actions/presupuestos.ts` | Server action que guarda el formulario de presupuestos |
 | `src/lib/presupuestos.ts` | Avance del mes, progreso y validación de presupuestos (puro, testeado) |
 | `src/components/presupuestos-mes.tsx` | Tarjeta de presupuestos del Dashboard y su editor |
@@ -572,6 +610,7 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `supabase/checks_transacciones.sql` | CHECK constraints de `transacciones` |
 | `supabase/resumenes_importados.sql` | Hashes de los PDF importados, para avisar repetidos |
 | `supabase/diagnostico_checks.sql` | Qué filas existentes violarían esos CHECKs (sólo lectura) |
+| `supabase/metas_ahorro.sql` | Meta de ahorro (una por usuario) + políticas RLS |
 | `supabase/presupuestos.sql` | Presupuestos mensuales por categoría + políticas RLS |
 | `supabase/reglas_categoria.sql` | Reglas de categoría por comercio + políticas RLS |
 
