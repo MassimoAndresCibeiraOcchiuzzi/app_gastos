@@ -6,6 +6,7 @@ import {
   detalleCategoria,
   esDevolucionDeCategoria,
   filasCategoriasMes,
+  resumenMes,
 } from "../src/lib/dashboard.ts";
 import { ultimosMeses } from "../src/lib/formato.ts";
 
@@ -235,4 +236,83 @@ test("filas: el total suma sólo lo que va a la torta (sin el ajuste)", () => {
     t("2026-07-30", "Ajustes tarjeta", -17197.39),
   ];
   assert.equal(filasCategoriasMes(datos, MES, MESES, 6).total, 53630);
+});
+
+// --- número principal del mes -------------------------------------------------
+
+test("resumenMes: egresos, ingresos y balance como en Movimientos", () => {
+  const datos = [
+    t("2026-07-02", "Comida", 300000),
+    t("2026-07-03", "Transporte", 100000),
+    t("2026-07-01", "Otros", 900000, { tipo: "ingreso", descripcion: "Sueldo" }),
+    t("2026-06-10", "Comida", 999), // otro mes
+  ];
+  const r = resumenMes(datos, MES, false);
+  assert.equal(r.egresos, 400000);
+  assert.equal(r.ingresos, 900000);
+  assert.equal(r.balance, 500000);
+  assert.equal(r.ajuste, 0);
+});
+
+test("resumenMes: el ajuste de impuestos entra en egresos y se informa aparte", () => {
+  const datos = [
+    t("2026-07-02", "Comida", 100000),
+    t("2026-07-30", "Ajustes tarjeta", -17197.39),
+  ];
+  const r = resumenMes(datos, MES, false);
+  assert.equal(r.egresos, 82802.61); // igual que "Egresos" en Movimientos
+  assert.equal(r.ajuste, -17197.39);
+});
+
+test("resumenMes: con 3 meses de historia compara contra su promedio", () => {
+  const datos = [
+    t("2026-04-10", "Comida", 100000),
+    t("2026-05-10", "Salud", 200000),
+    t("2026-06-10", "Transporte", 300000), // promedio 200.000
+    t("2026-07-10", "Comida", 150000),
+  ];
+  assert.deepEqual(resumenMes(datos, MES, false).comparacion, {
+    tipo: "promedio",
+    porcentaje: -25,
+  });
+});
+
+test("resumenMes: con menos historia compara contra el mes anterior con egresos", () => {
+  const datos = [
+    t("2026-05-10", "Comida", 200000), // abril sin historia
+    t("2026-06-01", "Otros", 50000, { tipo: "ingreso" }), // junio sólo ingresos
+    t("2026-07-10", "Comida", 300000),
+  ];
+  assert.deepEqual(resumenMes(datos, MES, false).comparacion, {
+    tipo: "mes",
+    porcentaje: 50,
+    mes: "2026-05",
+  });
+});
+
+test("resumenMes: sin ningún mes anterior con egresos, no hay comparación", () => {
+  assert.equal(resumenMes([t("2026-07-10", "Comida", 1)], MES, false).comparacion, null);
+});
+
+test("resumenMes: en el mes en curso nunca hay comparación", () => {
+  const datos = [
+    t("2026-04-10", "Comida", 100000),
+    t("2026-05-10", "Comida", 100000),
+    t("2026-06-10", "Comida", 100000),
+    t("2026-07-10", "Comida", 20000),
+  ];
+  assert.equal(resumenMes(datos, MES, true).comparacion, null);
+  // El mismo mes, ya cerrado, sí la tendría.
+  assert.equal(resumenMes(datos, MES, false).comparacion.tipo, "promedio");
+});
+
+test("resumenMes: un mes sin egresos no se compara (sería ▼100%)", () => {
+  const datos = [
+    t("2026-04-10", "Comida", 1),
+    t("2026-05-10", "Comida", 1),
+    t("2026-06-10", "Comida", 1),
+  ];
+  const r = resumenMes(datos, MES, false);
+  assert.equal(r.egresos, 0);
+  assert.equal(r.comparacion, null);
 });

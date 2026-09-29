@@ -93,7 +93,7 @@ export default function TortaEgresos({
         ) : (
           <div className="flex max-w-[7rem] flex-col items-center gap-0.5">
             <span className="text-[11px] leading-tight opacity-60">
-              Total egresos
+              En categorías
             </span>
             <span className="fuente-display w-full truncate text-base font-semibold leading-tight tabular-nums">
               {formatearARS(total)}
