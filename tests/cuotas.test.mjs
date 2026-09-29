@@ -171,3 +171,28 @@ test("proyectarCuotas: el horizonte limita el gráfico, no el total", () => {
   assert.equal(p.meses.length, 6);
   assert.equal(p.totalPendiente, 23000);
 });
+
+test("proyectarCuotas: sin horizonte, llega hasta la última cuota aunque pase de 12 meses", () => {
+  const compras = comprasEnCuotas([
+    t("2026-09-01", "AUTO - Cuota 01/24", 1000),
+    t("2026-09-01", "TV - Cuota 01/03", 500),
+  ]);
+  const p = proyectarCuotas(compras, "2026-09");
+  assert.equal(p.meses.length, 23); // oct 2026 … ago 2028
+  assert.equal(p.meses.at(-1).mes, "2028-08");
+  assert.equal(p.meses.at(-1).cuotas[0].numero, 24);
+  assert.equal(p.meses[2].total, 1000); // diciembre: la TV ya terminó en noviembre
+});
+
+test("proyectarCuotas: un mes del medio sin cuotas queda en 0, sin cortar la serie", () => {
+  // Una compra que termina en octubre y otra cuya primera cuota es en diciembre.
+  const compras = comprasEnCuotas([
+    t("2026-09-01", "A - Cuota 02/03", 100),
+    t("2026-12-01", "B - Cuota 01/02", 200),
+  ]);
+  const p = proyectarCuotas(compras, "2026-09");
+  assert.deepEqual(
+    p.meses.map((m) => [m.mes, m.total]),
+    [["2026-10", 100], ["2026-11", 0], ["2026-12", 200], ["2027-01", 200]],
+  );
+});
