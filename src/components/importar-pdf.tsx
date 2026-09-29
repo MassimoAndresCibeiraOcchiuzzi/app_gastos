@@ -13,6 +13,7 @@ import {
   formatearFechaNumerica,
   formatearUSD,
   nombreMes,
+  parsearMonto,
   primerDia,
   redondearCentavos,
 } from "@/lib/formato";
@@ -49,9 +50,21 @@ type Fila = {
    * egreso y su monto puede ser negativo (más devoluciones que percepciones).
    */
   esAjuste?: boolean;
+  /**
+   * Si el filtro automático la sacó, la palabra que coincidió. Se muestra
+   * destildada, al final, para re-incluirla si el filtro se equivocó.
+   */
+  motivoDescarte?: string;
 };
 
-type Estado = "vacio" | "analizando" | "revisando" | "guardando" | "listo";
+type Estado =
+  | "vacio"
+  | "analizando"
+  /** El servidor avisó que este mismo PDF ya se importó: espera confirmación. */
+  | "duplicado"
+  | "revisando"
+  | "guardando"
+  | "listo";
 
 /**
  * Lo que se guarda es el mes en que pagás el resumen, no la fecha de compra:
@@ -69,6 +82,19 @@ function aFila(item: ItemExtraido, id: number, fechaImputacion: string): Fila {
     fechaOriginal: item.fecha,
     fechaEditada: false,
     ...aCamposGuardables(item),
+  };
+}
+
+/** Una línea descartada por el filtro: misma fila, pero destildada. */
+function aFilaDescartada(
+  item: Descartado,
+  id: number,
+  fechaImputacion: string,
+): Fila {
+  return {
+    ...aFila(item, id, fechaImputacion),
+    incluir: false,
+    motivoDescarte: item.motivo,
   };
 }
 
@@ -104,7 +130,9 @@ export default function ImportarPdf({
   const [estado, setEstado] = useState<Estado>("vacio");
   const [error, setError] = useState<string | null>(null);
   const [filas, setFilas] = useState<Fila[]>([]);
-  const [descartados, setDescartados] = useState<Descartado[]>([]);
+  const [avisoDuplicado, setAvisoDuplicado] = useState<string | null>(null);
+  /** SHA-256 del PDF analizado; se registra al confirmar la importación. */
+  const [hash, setHash] = useState<string | null>(null);
   const [ajuste, setAjuste] = useState<Ajuste | null>(null);
   const [metodo, setMetodo] = useState<Metodo>("texto");
   const [totalResumen, setTotalResumen] = useState<TotalResumen>(TOTAL_VACIO);
@@ -117,10 +145,24 @@ export default function ImportarPdf({
   const archivoRef = useRef<HTMLInputElement>(null);
 
   const incluidas = filas.filter((f) => f.incluir);
+  const principales = filas.filter((f) => !f.motivoDescarte);
+  const descartadas = filas.filter((f) => f.motivoDescarte);
   const mesOk = esMesValido(mesResumen);
+  // Mientras se analiza o se espera la respuesta al aviso de duplicado, el
+  // formulario queda quieto: el archivo elegido es el que se va a reenviar.
+  const formBloqueado = estado === "analizando" || estado === "duplicado";
 
-  async function analizar(e: React.FormEvent<HTMLFormElement>) {
+  function analizar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    enviarPdf(false);
+  }
+
+  /**
+   * Manda el PDF a analizar. `confirmarDuplicado` va en true cuando el
+   * usuario ya vio el aviso de "este resumen ya fue importado" y eligió
+   * seguir igual.
+   */
+  async function enviarPdf(confirmarDuplicado: boolean) {
     const archivo = archivoRef.current?.files?.[0];
     if (!archivo) return;
 
@@ -131,10 +173,12 @@ export default function ImportarPdf({
 
     setEstado("analizando");
     setError(null);
+    setAvisoDuplicado(null);
 
     const datos = new FormData();
     datos.append("archivo", archivo);
     datos.append("incluirImpuestos", String(incluirImpuestos));
+    datos.append("confirmarDuplicado", String(confirmarDuplicado));
 
     try {
       const respuesta = await fetch("/api/importar", {
@@ -149,6 +193,17 @@ export default function ImportarPdf({
       }
 
       const cuerpo = await respuesta.json().catch(() => null);
+
+      // Este mismo archivo ya se importó: no es un error, es una pregunta.
+      if (respuesta.status === 409 && cuerpo?.duplicado) {
+        setAvisoDuplicado(
+          typeof cuerpo.error === "string"
+            ? cuerpo.error
+            : "Este resumen ya fue importado antes. ¿Querés continuar igual?",
+        );
+        setEstado("duplicado");
+        return;
+      }
 
       if (!respuesta.ok) {
         // Si el servidor devolvió un JSON con `error`, ese es el mensaje bueno.
@@ -168,14 +223,20 @@ export default function ImportarPdf({
       const ajusteResp = (cuerpo?.ajuste ?? null) as Ajuste | null;
       const imputacion = primerDia(mesResumen);
 
-      // Consumos primero, y el ajuste de impuestos como última fila.
+      const descartadosResp = (cuerpo?.descartados ?? []) as Descartado[];
+
+      // Consumos primero, después el ajuste de impuestos, y al final lo que
+      // descartó el filtro (destildado).
       const nuevas = items.map((item, i) => aFila(item, i, imputacion));
       if (ajusteResp) {
         nuevas.push(aFilaAjuste(ajusteResp, nuevas.length, imputacion));
       }
+      for (const d of descartadosResp) {
+        nuevas.push(aFilaDescartada(d, nuevas.length, imputacion));
+      }
       setFilas(nuevas);
       setAjuste(ajusteResp);
-      setDescartados((cuerpo?.descartados ?? []) as Descartado[]);
+      setHash(typeof cuerpo?.hash === "string" ? cuerpo.hash : null);
       setMetodo(cuerpo?.metodo === "vision" ? "vision" : "texto");
       setTotalResumen((cuerpo?.totalResumen ?? TOTAL_VACIO) as TotalResumen);
       setEstado("revisando");
@@ -236,8 +297,14 @@ export default function ImportarPdf({
     );
   }
 
+  /**
+   * "Marcar todas" no toca las descartadas: ahí hay saldos y pagos, que no
+   * deben entrar de a montón. Esas se tildan de a una. Desmarcar sí es todas.
+   */
   function marcarTodas(incluir: boolean) {
-    setFilas((fs) => fs.map((f) => ({ ...f, incluir })));
+    setFilas((fs) =>
+      fs.map((f) => (incluir && f.motivoDescarte ? f : { ...f, incluir })),
+    );
   }
 
   function confirmar() {
@@ -258,7 +325,7 @@ export default function ImportarPdf({
     }));
 
     iniciar(async () => {
-      const resultado = await importarTransacciones(entradas);
+      const resultado = await importarTransacciones(entradas, hash ?? undefined);
       if (!resultado.ok) {
         setError(resultado.error);
         setEstado("revisando");
@@ -273,12 +340,139 @@ export default function ImportarPdf({
   function empezarDeNuevo() {
     if (archivoRef.current) archivoRef.current.value = "";
     setFilas([]);
-    setDescartados([]);
     setAjuste(null);
+    setHash(null);
+    setAvisoDuplicado(null);
     setTotalResumen(TOTAL_VACIO);
     setCuenta("");
     setError(null);
     setEstado("vacio");
+  }
+
+  /** Una fila de la revisión. La usan la lista principal y la de descartadas. */
+  function renderFila(fila: Fila) {
+    return (
+      <li
+        key={fila.id}
+        className={`rounded-xl border border-black/10 p-3 transition-opacity dark:border-white/15 ${
+          fila.incluir ? "" : "opacity-45"
+        }`}
+      >
+        <div className="flex items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={fila.incluir}
+            onChange={(e) => editar(fila.id, "incluir", e.target.checked)}
+            aria-label={`Incluir ${fila.descripcion || "esta fila"}`}
+            className="h-4 w-4 shrink-0 accent-current"
+          />
+          <input
+            type="text"
+            maxLength={200}
+            value={fila.descripcion}
+            onChange={(e) =>
+              editar(fila.id, "descripcion", e.target.value)
+            }
+            aria-label="Descripción"
+            className={INPUT}
+          />
+        </div>
+
+        <div className="mt-2 grid grid-cols-2 gap-2 pl-[26px] sm:grid-cols-4">
+          <div>
+            <label className={ETIQUETA} htmlFor={`fecha-${fila.id}`}>
+              Fecha
+            </label>
+            <input
+              id={`fecha-${fila.id}`}
+              type="date"
+              value={fila.fecha}
+              onChange={(e) => editarFecha(fila.id, e.target.value)}
+              className={`${INPUT} mt-0.5`}
+            />
+          </div>
+          <div>
+            <label className={ETIQUETA} htmlFor={`monto-${fila.id}`}>
+              Monto
+            </label>
+            <input
+              id={`monto-${fila.id}`}
+              type="text"
+              inputMode="decimal"
+              value={fila.monto}
+              onChange={(e) => editar(fila.id, "monto", e.target.value)}
+              className={`${INPUT} mt-0.5 tabular-nums`}
+            />
+          </div>
+          <div>
+            <label className={ETIQUETA} htmlFor={`tipo-${fila.id}`}>
+              Tipo
+            </label>
+            {/* El ajuste queda fijo en egreso: un egreso negativo resta
+                de los egresos; como ingreso ensuciaría ese total. */}
+            <select
+              id={`tipo-${fila.id}`}
+              value={fila.tipo}
+              disabled={fila.esAjuste}
+              onChange={(e) =>
+                editar(fila.id, "tipo", e.target.value as Fila["tipo"])
+              }
+              className={`${CAMPO_SELECT_COMPACTO} mt-0.5 disabled:opacity-60`}
+            >
+              <option value="egreso">Egreso</option>
+              <option value="ingreso">Ingreso</option>
+            </select>
+          </div>
+          <div>
+            <label className={ETIQUETA} htmlFor={`categoria-${fila.id}`}>
+              Categoría
+            </label>
+            {fila.esAjuste ? (
+              <input
+                id={`categoria-${fila.id}`}
+                type="text"
+                value={CATEGORIA_AJUSTES}
+                disabled
+                className={`${INPUT} mt-0.5 disabled:opacity-60`}
+              />
+            ) : (
+              <SelectorCategoria
+                id={`categoria-${fila.id}`}
+                value={fila.categoria}
+                categorias={categorias}
+                onChange={(c) => editar(fila.id, "categoria", c)}
+                onCrear={crearCategoria}
+                className="mt-0.5"
+                compacto
+              />
+            )}
+          </div>
+        </div>
+
+        <p className="mt-1.5 pl-[26px] text-[11px] opacity-50">
+          {fila.esAjuste
+            ? "Neto de impuestos y percepciones del resumen"
+            : `Compra del ${formatearFechaNumerica(fila.fechaOriginal)}`}
+          {fila.motivoDescarte && (
+            <span className="text-amber-700 dark:text-amber-400">
+              {` · descartada: coincide con “${fila.motivoDescarte}”`}
+            </span>
+          )}
+          {fila.fechaEditada && (
+            <>
+              {" · fecha cambiada a mano · "}
+              <button
+                type="button"
+                onClick={() => volverAlMes(fila.id)}
+                className="underline underline-offset-2 hover:opacity-100"
+              >
+                volver al mes del resumen
+              </button>
+            </>
+          )}
+        </p>
+      </li>
+    );
   }
 
   if (estado === "listo") {
@@ -302,7 +496,7 @@ export default function ImportarPdf({
 
   return (
     <div className="flex flex-col gap-5">
-      {(estado === "vacio" || estado === "analizando") && (
+      {(estado === "vacio" || formBloqueado) && (
         <form
           onSubmit={analizar}
           className="flex flex-col gap-4 rounded-xl border border-black/10 p-4 dark:border-white/15"
@@ -317,7 +511,7 @@ export default function ImportarPdf({
               required
               value={mesResumen}
               onChange={(e) => cambiarMes(e.target.value)}
-              disabled={estado === "analizando"}
+              disabled={formBloqueado}
               className={`${INPUT} mt-1.5 max-w-[11rem]`}
             />
             <p className="mt-1.5 text-xs opacity-60">
@@ -337,7 +531,7 @@ export default function ImportarPdf({
               type="file"
               accept="application/pdf"
               required
-              disabled={estado === "analizando"}
+              disabled={formBloqueado}
               className="mt-1.5 block text-sm file:mr-3 file:rounded-lg file:border file:border-black/15 file:bg-transparent file:px-3 file:py-1.5 file:text-sm file:text-inherit dark:file:border-white/20"
             />
             <p className="mt-1.5 text-xs opacity-60">
@@ -351,7 +545,7 @@ export default function ImportarPdf({
               type="checkbox"
               checked={incluirImpuestos}
               onChange={(e) => setIncluirImpuestos(e.target.checked)}
-              disabled={estado === "analizando"}
+              disabled={formBloqueado}
               className="mt-0.5 h-4 w-4 shrink-0 accent-current"
             />
             <span className="text-sm">
@@ -366,7 +560,7 @@ export default function ImportarPdf({
 
           <button
             type="submit"
-            disabled={estado === "analizando"}
+            disabled={formBloqueado}
             className="rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition hover:opacity-90 active:scale-[.99] disabled:opacity-50 disabled:active:scale-100"
           >
             {estado === "analizando" ? "Analizando…" : "Analizar PDF"}
@@ -378,6 +572,40 @@ export default function ImportarPdf({
             </p>
           )}
         </form>
+      )}
+
+      {estado === "duplicado" && avisoDuplicado && (
+        <div
+          role="alertdialog"
+          aria-labelledby="aviso-duplicado"
+          className="flex flex-col gap-3 rounded-xl border border-amber-500/50 bg-amber-500/5 p-4 text-sm"
+        >
+          <p id="aviso-duplicado" className="font-medium text-amber-800 dark:text-amber-300">
+            {avisoDuplicado}
+          </p>
+          <p className="text-xs opacity-70">
+            Si seguís, se van a cargar de nuevo todos sus movimientos y podés
+            terminar con gastos duplicados. Sólo tiene sentido si borraste la
+            importación anterior.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => enviarPdf(true)}
+              className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition hover:opacity-90 active:scale-[.99]"
+            >
+              Continuar igual
+            </button>
+            <button
+              type="button"
+              autoFocus
+              onClick={empezarDeNuevo}
+              className="rounded-lg border border-black/15 px-4 py-2 text-sm hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
       )}
 
       {error && (
@@ -403,7 +631,8 @@ export default function ImportarPdf({
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="text-sm font-medium">
-                {filas.length} {filas.length === 1 ? "movimiento" : "movimientos"}{" "}
+                {principales.length}{" "}
+                {principales.length === 1 ? "movimiento" : "movimientos"}{" "}
                 encontrados
               </h2>
               <p className="mt-0.5 text-xs opacity-60">
@@ -510,147 +739,32 @@ export default function ImportarPdf({
             </details>
           )}
 
-          {descartados.length > 0 && (
-            <details className="-mt-2 rounded-xl border border-black/10 p-3 dark:border-white/15">
-              <summary className="cursor-pointer text-xs opacity-60 hover:opacity-100">
-                Descartamos {descartados.length}{" "}
-                {descartados.length === 1 ? "línea" : "líneas"} que no son
-                consumos (saldos, pagos, impuestos y percepciones). Ver cuáles
-              </summary>
-              <ul className="mt-2 flex flex-col gap-1 text-xs opacity-70">
-                {descartados.map((d, i) => (
-                  <li key={i} className="flex flex-wrap gap-x-2">
-                    <span className="truncate">{d.descripcion}</span>
-                    <span className="opacity-60">— coincide con “{d.motivo}”</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2 text-xs opacity-50">
-                Si acá cayó un consumo de verdad, avisá: la lista de exclusión
-                está en <code>src/lib/extraccion.ts</code>.
-              </p>
-            </details>
-          )}
-
           <ul className="flex flex-col gap-3">
-            {filas.map((fila) => (
-              <li
-                key={fila.id}
-                className={`rounded-xl border border-black/10 p-3 transition-opacity dark:border-white/15 ${
-                  fila.incluir ? "" : "opacity-45"
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <input
-                    type="checkbox"
-                    checked={fila.incluir}
-                    onChange={(e) => editar(fila.id, "incluir", e.target.checked)}
-                    aria-label={`Incluir ${fila.descripcion || "esta fila"}`}
-                    className="h-4 w-4 shrink-0 accent-current"
-                  />
-                  <input
-                    type="text"
-                    maxLength={200}
-                    value={fila.descripcion}
-                    onChange={(e) =>
-                      editar(fila.id, "descripcion", e.target.value)
-                    }
-                    aria-label="Descripción"
-                    className={INPUT}
-                  />
-                </div>
-
-                <div className="mt-2 grid grid-cols-2 gap-2 pl-[26px] sm:grid-cols-4">
-                  <div>
-                    <label className={ETIQUETA} htmlFor={`fecha-${fila.id}`}>
-                      Fecha
-                    </label>
-                    <input
-                      id={`fecha-${fila.id}`}
-                      type="date"
-                      value={fila.fecha}
-                      onChange={(e) => editarFecha(fila.id, e.target.value)}
-                      className={`${INPUT} mt-0.5`}
-                    />
-                  </div>
-                  <div>
-                    <label className={ETIQUETA} htmlFor={`monto-${fila.id}`}>
-                      Monto
-                    </label>
-                    <input
-                      id={`monto-${fila.id}`}
-                      type="text"
-                      inputMode="decimal"
-                      value={fila.monto}
-                      onChange={(e) => editar(fila.id, "monto", e.target.value)}
-                      className={`${INPUT} mt-0.5 tabular-nums`}
-                    />
-                  </div>
-                  <div>
-                    <label className={ETIQUETA} htmlFor={`tipo-${fila.id}`}>
-                      Tipo
-                    </label>
-                    {/* El ajuste queda fijo en egreso: un egreso negativo resta
-                        de los egresos; como ingreso ensuciaría ese total. */}
-                    <select
-                      id={`tipo-${fila.id}`}
-                      value={fila.tipo}
-                      disabled={fila.esAjuste}
-                      onChange={(e) =>
-                        editar(fila.id, "tipo", e.target.value as Fila["tipo"])
-                      }
-                      className={`${CAMPO_SELECT_COMPACTO} mt-0.5 disabled:opacity-60`}
-                    >
-                      <option value="egreso">Egreso</option>
-                      <option value="ingreso">Ingreso</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={ETIQUETA} htmlFor={`categoria-${fila.id}`}>
-                      Categoría
-                    </label>
-                    {fila.esAjuste ? (
-                      <input
-                        id={`categoria-${fila.id}`}
-                        type="text"
-                        value={CATEGORIA_AJUSTES}
-                        disabled
-                        className={`${INPUT} mt-0.5 disabled:opacity-60`}
-                      />
-                    ) : (
-                      <SelectorCategoria
-                        id={`categoria-${fila.id}`}
-                        value={fila.categoria}
-                        categorias={categorias}
-                        onChange={(c) => editar(fila.id, "categoria", c)}
-                        onCrear={crearCategoria}
-                        className="mt-0.5"
-                        compacto
-                      />
-                    )}
-                  </div>
-                </div>
-
-                <p className="mt-1.5 pl-[26px] text-[11px] opacity-50">
-                  {fila.esAjuste
-                    ? "Neto de impuestos y percepciones del resumen"
-                    : `Compra del ${formatearFechaNumerica(fila.fechaOriginal)}`}
-                  {fila.fechaEditada && (
-                    <>
-                      {" · fecha cambiada a mano · "}
-                      <button
-                        type="button"
-                        onClick={() => volverAlMes(fila.id)}
-                        className="underline underline-offset-2 hover:opacity-100"
-                      >
-                        volver al mes del resumen
-                      </button>
-                    </>
-                  )}
-                </p>
-              </li>
-            ))}
+            {principales.map(renderFila)}
           </ul>
+
+          {descartadas.length > 0 && (
+            <section
+              aria-labelledby="titulo-descartadas"
+              className="flex flex-col gap-3"
+            >
+              <div>
+                <h3 id="titulo-descartadas" className="text-sm font-medium">
+                  Descartadas automáticamente ({descartadas.length})
+                </h3>
+                <p className="mt-0.5 text-xs opacity-60">
+                  El filtro las tomó por saldos, pagos o{" "}
+                  {incluirImpuestos ? "totales" : "impuestos y percepciones"} y
+                  no se importan. Si alguna es un consumo de verdad, tildala y
+                  corregí lo que haga falta. &quot;Marcar todas&quot; no las
+                  incluye.
+                </p>
+              </div>
+              <ul className="flex flex-col gap-3">
+                {descartadas.map(renderFila)}
+              </ul>
+            </section>
+          )}
 
           <div className="sticky bottom-4 flex flex-wrap items-center gap-3 rounded-xl border border-black/10 bg-background p-3 dark:border-white/15">
             <button
@@ -683,9 +797,15 @@ export default function ImportarPdf({
   );
 }
 
+/**
+ * Suma con signo de las filas. Parsea cada monto con `parsearMonto`, la misma
+ * función que usa el servidor al guardar: si no, "1.234,56" escrito a mano se
+ * leía distinto acá y allá, y el checksum no decía la verdad. Un monto que no
+ * se puede leer suma 0 (el servidor lo va a rechazar al confirmar).
+ */
 function neto(filas: Fila[]): number {
   const total = filas.reduce((acc, f) => {
-    const monto = Number(f.monto.replace(",", ".")) || 0;
+    const monto = parsearMonto(f.monto) ?? 0;
     return acc + (f.tipo === "ingreso" ? monto : -monto);
   }, 0);
   return redondearCentavos(total);

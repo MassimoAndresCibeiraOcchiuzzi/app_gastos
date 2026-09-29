@@ -46,40 +46,51 @@ export const EXCLUSIONES = [
  * no son consumos: por defecto se descartan y sólo se importan si el usuario
  * tilda "Incluir impuestos" antes de subir el PDF.
  *
- * "DEVOLUCION" a secas también entra: si quedara afuera se cargaría como
- * consumo con el monto en positivo — o sea sumando cuando en realidad resta.
+ * Se comparan por palabra completa (ver `buscarClave`), así que cada variante
+ * que usan los bancos va escrita: "PERCEP" ya no agarra "PERCEPCION" ni
+ * "PERCEPTRON". "DEVOLUCION" y "REINTEGRO" a secas NO están: sólo cuentan
+ * como impuesto si van con el nombre del impuesto ("DEVOLUCION IMPUESTO",
+ * "REINTEGRO IVA"). Una devolución de un comercio es un consumo más, que
+ * `aCamposGuardables` carga como ingreso.
  */
 export const IMPUESTOS = [
   "IIBB",
   "PERCEP",
+  "PERCEPCION",
+  "PERCEPCIONES",
   "IVA RG",
   "DB.RG",
   "DEV.IMP",
   "DEVOLUCION IMP",
-  "DEVOLUCION",
-  "REINTEGRO",
+  "DEVOLUCION IMPUESTO",
+  "DEVOLUCION IMPUESTOS",
+  "DEVOLUCION IVA",
+  "REINTEGRO IMP",
+  "REINTEGRO IMPUESTO",
+  "REINTEGRO IMPUESTOS",
+  "REINTEGRO IVA",
   "IMP. LEY",
+  "IMPUESTO LEY",
   "IMPUESTO DE SELLOS",
 ] as const;
 
 /**
- * De los impuestos, cuáles son un crédito a favor (devolución o reintegro).
- * Determinan que la fila se cargue como ingreso en vez de egreso.
+ * Palabras de un crédito a favor (devolución o reintegro), sea de un impuesto
+ * o de un comercio. Determinan el signo: en el ajuste de impuestos restan, y
+ * un consumo que las lleva se carga como ingreso en vez de egreso.
  */
 export const DEVOLUCIONES = [
   "DEV.IMP",
   "DEVOLUCION",
+  "DEVOLUCIONES",
   "REINTEGRO",
+  "REINTEGROS",
 ] as const;
 
 /** Descripción del ítem único que netea todos los impuestos del resumen. */
 export const DESCRIPCION_AJUSTES = "Ajustes impuestos y percepciones tarjeta";
 
-/**
- * MAYÚSCULAS, sin tildes y sin separadores.
- * Sacar los separadores es lo que hace que "DEV. IMP.", "DEV.IMP" y "DEVIMP"
- * caigan todas en la misma bolsa: cada banco puntúa distinto.
- */
+/** MAYÚSCULAS, sin tildes y sin separadores: "Dev. Imp." → "DEVIMP". */
 export function normalizarDescripcion(texto: string): string {
   return texto
     .normalize("NFD")
@@ -88,16 +99,47 @@ export function normalizarDescripcion(texto: string): string {
     .replace(/[^A-Z0-9]/g, "");
 }
 
-/** Busca la primera clave de `lista` contenida en la descripción normalizada. */
+/** Las palabras de un texto, en MAYÚSCULAS y sin tildes: "Dev. Imp." → [DEV, IMP]. */
+function palabras(texto: string): string[] {
+  return texto
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter(Boolean);
+}
+
+/**
+ * ¿Aparece la clave como palabras completas y seguidas? Se comparan pegadas
+ * (sin separadores), así cada banco puede puntuar distinto: la clave "DEV.IMP"
+ * coincide con "DEV. IMP.", "DEV.IMP" y "DEVIMP". Pero nunca con un pedazo de
+ * palabra: "PERCEP" no coincide con "PERCEPTRON", ni "SALDO ACTUAL" con
+ * "SALDO ACTUALIZADO".
+ */
+function contieneClave(tokens: string[], clave: string): boolean {
+  for (let i = 0; i < tokens.length; i++) {
+    let pegado = "";
+    for (let j = i; j < tokens.length; j++) {
+      pegado += tokens[j];
+      if (pegado === clave) return true;
+      if (!clave.startsWith(pegado)) break;
+    }
+  }
+  return false;
+}
+
+/** La primera clave de `lista` que aparece en la descripción, o null. */
 function buscarClave(
   descripcion: string,
   lista: readonly string[],
 ): string | null {
-  const normalizada = normalizarDescripcion(descripcion);
-  const i = lista
-    .map(normalizarDescripcion)
-    .findIndex((clave) => clave !== "" && normalizada.includes(clave));
-  return i === -1 ? null : lista[i];
+  const tokens = palabras(descripcion);
+  return (
+    lista.find((clave) => {
+      const compacta = normalizarDescripcion(clave);
+      return compacta !== "" && contieneClave(tokens, compacta);
+    }) ?? null
+  );
 }
 
 /** La palabra que marca al ítem como aritmética pura (siempre se descarta). */
@@ -110,12 +152,16 @@ export function motivoDeImpuesto(descripcion: string): string | null {
   return buscarClave(descripcion, IMPUESTOS);
 }
 
-/** Un impuesto que es crédito a favor: se carga como ingreso, no egreso. */
+/** Un crédito a favor (de impuesto o de comercio): resta en vez de sumar. */
 export function esDevolucion(descripcion: string): boolean {
   return buscarClave(descripcion, DEVOLUCIONES) !== null;
 }
 
-export type Descartado = { descripcion: string; motivo: string };
+/**
+ * Una línea que el filtro sacó, con todo lo necesario para mostrarla como
+ * fila destildada en la revisión: si el filtro se equivocó, se re-incluye.
+ */
+export type Descartado = ItemExtraido & { motivo: string };
 
 /** Una línea de impuesto con su aporte al neto (las devoluciones ya en negativo). */
 export type LineaImpuesto = { descripcion: string; monto: number };
@@ -162,7 +208,7 @@ export function clasificarItems(
   for (const item of items) {
     const ruido = motivoDeExclusion(item.descripcion);
     if (ruido !== null) {
-      descartados.push({ descripcion: item.descripcion, motivo: ruido });
+      descartados.push({ ...item, motivo: ruido });
       continue;
     }
 
@@ -171,7 +217,7 @@ export function clasificarItems(
       if (incluirImpuestos) {
         lineas.push({ descripcion: item.descripcion, monto: aporteAlNeto(item) });
       } else {
-        descartados.push({ descripcion: item.descripcion, motivo: impuesto });
+        descartados.push({ ...item, motivo: impuesto });
       }
       continue;
     }
@@ -190,11 +236,13 @@ export function clasificarItems(
 /**
  * Traduce un ítem del modelo a los campos que se van a guardar.
  *
- * Todo entra como **egreso**: un resumen de tarjeta no genera ingresos, y las
- * líneas que sí venían con signo negativo en el PDF (pagos, devoluciones de
- * impuestos, saldos) son justamente las que el prompt ahora excluye. Si aun
- * así llegara un monto negativo, lo tomamos como gasto en vez de fabricar un
- * ingreso que rompa el balance. El tipo sigue siendo editable en la tabla.
+ * Entra como **egreso**, salvo que la descripción sea una devolución o un
+ * reintegro ("DEVOLUCION COMPRA ZARA", "REINTEGRO PROMO"): eso es un crédito,
+ * y como egreso sumaría en vez de restar. Va como **ingreso** y no como
+ * egreso negativo porque en la base sólo el ajuste de impuestos puede ser
+ * negativo. El signo del modelo no se usa (se le pide todo en positivo): un
+ * negativo suelto no alcanza para fabricar un ingreso. El tipo sigue siendo
+ * editable en la tabla.
  *
  * La categoría es fija: **"Tarjeta"** para todo lo importado de un resumen. El
  * usuario puede cambiarla fila por fila en la tabla de revisión.
@@ -202,13 +250,13 @@ export function clasificarItems(
 export function aCamposGuardables(item: ItemExtraido): {
   descripcion: string;
   monto: string;
-  tipo: "egreso";
+  tipo: "ingreso" | "egreso";
   categoria: string;
 } {
   return {
     descripcion: item.descripcion,
     monto: Math.abs(item.monto).toFixed(2),
-    tipo: "egreso",
+    tipo: esDevolucion(item.descripcion) ? "ingreso" : "egreso",
     categoria: CATEGORIA_TARJETA,
   };
 }

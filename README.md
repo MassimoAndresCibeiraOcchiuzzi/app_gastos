@@ -125,11 +125,15 @@ revisión si quiere.
 
 Los **consumos** se importan siempre: una transacción por línea, con su comercio
 como descripción, categoría `"Tarjeta"` y tipo egreso. Si el modelo devolviera
-un consumo con monto negativo, `aCamposGuardables` lo toma en valor absoluto
-(nunca fabrica un ingreso a partir de un consumo).
+un consumo con monto negativo, `aCamposGuardables` lo toma en valor absoluto.
+La excepción son las **devoluciones y reintegros de comercios** ("DEVOLUCION
+COMPRA ZARA", "REINTEGRO PROMO SUPERMERCADO"): son créditos, así que entran
+como **ingreso** (como egreso sumarían en vez de restar; y como egreso negativo
+no pueden, porque en la base sólo el ajuste de impuestos puede ser negativo).
 
-Los **impuestos y percepciones** (IIBB, PERCEP, IVA RG, DB.RG, IMP. LEY, y sus
-devoluciones DEV.IMP / DEVOLUCION / REINTEGRO) dependen de un **toggle** que el
+Los **impuestos y percepciones** (IIBB, PERCEP/PERCEPCION, IVA RG, DB.RG,
+IMP. LEY, y sus devoluciones: DEV.IMP, DEVOLUCION IMPUESTO, REINTEGRO IVA…)
+dependen de un **toggle** que el
 usuario tilda antes de subir el PDF, `default destildado`:
 
 - **Destildado** (comportamiento base): no se importan. Quedan como diferencia
@@ -172,10 +176,14 @@ La aritmética del resumen (saldos, pagos, totales) queda afuera siempre, por
    lo verifica sobre la respuesta ya recibida, antes de mandarla al navegador.
    El prompt es una sugerencia; la clasificación es la garantía.
 
-Compara la descripción en MAYÚSCULAS, sin tildes y **sin separadores**, contra
-`EXCLUSIONES` (ruido puro) e `IMPUESTOS`. Sacar los separadores es lo que hace
-que `DEV. IMP.`, `DEV.IMP` y `DEVIMP` caigan en la misma bolsa — cada banco
-puntúa distinto.
+Compara por **palabra completa**, en MAYÚSCULAS y sin tildes, contra
+`EXCLUSIONES` (ruido puro) e `IMPUESTOS`. Las palabras consecutivas se comparan
+pegadas, así `DEV. IMP.`, `DEV.IMP` y `DEVIMP` caen en la misma bolsa (cada
+banco puntúa distinto), pero nunca coincide un pedazo de palabra: `PERCEP` no
+agarra "PERCEPTRON" ni `SALDO ACTUAL` agarra "SALDO ACTUALIZADO". Por eso cada
+variante va escrita en la lista (`PERCEP`, `PERCEPCION`, `PERCEPCIONES`), y
+`DEVOLUCION` / `REINTEGRO` sólo cuentan como impuesto junto al nombre del
+impuesto (`DEVOLUCION IMPUESTO`, `REINTEGRO IVA`).
 
 ### Checksum (informativo)
 
@@ -186,18 +194,29 @@ subtotal parcial de una tarjeta adicional, antes de impuestos.
 
 La pantalla de revisión compara ese número contra la suma de las filas marcadas
 (egresos menos ingresos) y avisa en ámbar si no coinciden, con la diferencia
-exacta. Con el toggle de impuestos **tildado** y todas las filas marcadas, la
+exacta. Los montos se leen con `parsearMonto`, la misma función que usa el
+servidor al guardar, así un "1.234,56" corregido a mano suma lo mismo en los dos
+lados. Con el toggle de impuestos **tildado** y todas las filas marcadas, la
 diferencia da $0. Con el toggle destildado la diferencia son los impuestos que
 quedaron afuera, y el aviso sugiere tildarlo o cargar una transacción a mano.
 
 Las dos monedas van por separado: los consumos en dólares **no** se importan ni
 se convierten, y el total en dólares se muestra sólo como referencia.
 
-Lo descartado no se tira en silencio: la route lo devuelve en `descartados` y la
-pantalla lo muestra en un desplegable con el motivo de cada exclusión. La
-coincidencia es por subcadena, así que un comercio que empiece igual que una
-palabra de la lista (`PERCEP` vs. "LA PERCEPTIVA") también cae; por eso se
-muestra. Para agregar o sacar palabras, editá `EXCLUSIONES` / `IMPUESTOS`.
+Lo descartado no se tira en silencio: la route lo devuelve en `descartados`
+(con fecha y monto) y la pantalla lo muestra al final como **filas destildadas y
+editables**, con el motivo de cada exclusión. Si el filtro se equivocó, se tilda
+y entra como cualquier otra. "Marcar todas" no las incluye, para no importar
+saldos y pagos de a montón. Para agregar o sacar palabras, editá `EXCLUSIONES` /
+`IMPUESTOS`.
+
+**Resúmenes repetidos:** la route calcula el SHA-256 del PDF y lo busca en
+`resumenes_importados` antes de gastar nada. Si ya está, responde 409 y la
+pantalla pregunta "Este resumen ya fue importado el [fecha]. ¿Querés continuar
+igual?"; sólo sigue si confirmás. El hash se registra al **confirmar** la
+importación, no al analizar. Detecta el archivo exacto: el mismo resumen
+descargado de nuevo del home banking puede tener otros bytes y no se detecta.
+Si la tabla no existe o la búsqueda falla, se importa sin el aviso.
 
 ### Qué fecha se guarda
 
@@ -339,6 +358,10 @@ tenés datos cargados, corré antes
 lista las filas que violarían alguna regla. Si hay alguna, corregila primero; si
 no, la migración falla entera y no aplica nada.
 
+Y [`supabase/resumenes_importados.sql`](supabase/resumenes_importados.sql), para
+avisar cuando subís un resumen que ya importaste (sin ella se importa igual,
+pero sin el aviso).
+
 ### 3. Configurar las URLs de Auth
 
 Supabase Dashboard → **Authentication → URL Configuration**:
@@ -378,11 +401,11 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/app/api/importar/route.ts` | Manda el PDF a Claude y devuelve los movimientos |
 | `src/lib/extraccion-prompt.ts` | Prompt y esquema de salida (sólo servidor) |
 | `src/lib/extraccion.ts` | Clasificación y validación de la respuesta |
-| `src/lib/importacion.ts` | Límites de la importación: tamaño, firma PDF, cupo diario |
+| `src/lib/importacion.ts` | Límites de la importación (tamaño, firma PDF, cupo diario) y hash del PDF |
 | `src/lib/validacion.ts` | Qué es una transacción válida (alta manual e importación) |
 | `src/components/` | Selector de mes, resumen, formulario, lista, navegación |
 | `src/components/graficos/` | Torta y barras (recharts) |
-| `src/lib/consultas.ts` | Lectura de transacciones, paginada |
+| `src/lib/consultas.ts` | Lectura de transacciones, paginada con orden total (desempate por `id`) |
 | `src/lib/agregados.ts` | Totales por tipo, por categoría y por mes |
 | `src/lib/categorias.ts` | Categorías del sistema, su color y el largo máximo |
 | `src/lib/formato.ts` | Pesos, fechas y navegación de meses |
@@ -393,6 +416,7 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `supabase/categorias.sql` | Tabla `categorias` (personalizadas) + políticas RLS |
 | `supabase/importaciones.sql` | Tabla `importaciones` + RLS + función del límite diario |
 | `supabase/checks_transacciones.sql` | CHECK constraints de `transacciones` |
+| `supabase/resumenes_importados.sql` | Hashes de los PDF importados, para avisar repetidos |
 | `supabase/diagnostico_checks.sql` | Qué filas existentes violarían esos CHECKs (sólo lectura) |
 
 ## Cómo agregar una funcionalidad nueva

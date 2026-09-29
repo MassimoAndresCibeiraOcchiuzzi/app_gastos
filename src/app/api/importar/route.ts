@@ -13,6 +13,8 @@ import {
   MAX_BYTES,
   VENTANA_HORAS,
   esPdf,
+  hashSha256,
+  mensajeDuplicado,
   mensajeLimite,
   revisarContentLength,
 } from "@/lib/importacion";
@@ -59,14 +61,17 @@ export async function POST(request: NextRequest) {
     return error("El PDF pesa más de 4 MB, que es el máximo.", 413);
   }
 
-  // 3. El archivo y el toggle de impuestos.
+  // 3. El archivo, el toggle de impuestos y si el usuario ya aceptó el aviso
+  //    de resumen repetido.
   let archivo: File | null = null;
   let incluirImpuestos = false;
+  let confirmarDuplicado = false;
   try {
     const formData = await request.formData();
     const valor = formData.get("archivo");
     if (valor instanceof File) archivo = valor;
     incluirImpuestos = formData.get("incluirImpuestos") === "true";
+    confirmarDuplicado = formData.get("confirmarDuplicado") === "true";
   } catch {
     return error("No pudimos leer el archivo que subiste.", 400);
   }
@@ -89,7 +94,41 @@ export async function POST(request: NextRequest) {
   );
   if (!esPdf(firma)) return error("El archivo tiene que ser un PDF.", 400);
 
-  // 4. Límite de uso. Recién acá, con un PDF válido en la mano: un archivo
+  let bytes: Uint8Array;
+  let hash: string;
+  try {
+    bytes = new Uint8Array(await archivo.arrayBuffer());
+    hash = await hashSha256(bytes);
+  } catch (e) {
+    console.error("[importar] no se pudo leer el PDF:", e);
+    return error("No pudimos leer el archivo que subiste.", 400);
+  }
+
+  // 4. ¿Este mismo archivo ya se importó? Va antes del cupo y de Claude: si el
+  //    usuario desiste, no gastó nada. Si la consulta falla, se sigue sin el
+  //    aviso: es una ayuda, no un control de gasto como el cupo.
+  if (!confirmarDuplicado) {
+    const { data: previo, error: errorPrevio } = await supabase
+      .from("resumenes_importados")
+      .select("created_at")
+      .eq("hash", hash)
+      .maybeSingle();
+
+    if (errorPrevio) {
+      console.error("[importar] no se pudo buscar el hash del resumen:", errorPrevio);
+    } else if (previo) {
+      return NextResponse.json(
+        {
+          error: mensajeDuplicado(previo.created_at),
+          duplicado: true,
+          importadoEl: previo.created_at,
+        },
+        { status: 409 },
+      );
+    }
+  }
+
+  // 5. Límite de uso. Recién acá, con un PDF válido en la mano: un archivo
   //    rechazado arriba no gasta nada y no descuenta del cupo. La función
   //    SQL chequea y registra en un solo paso (ver supabase/importaciones.sql).
   //    Si el chequeo falla, no se sigue: sin límite no se gasta.
@@ -119,9 +158,7 @@ export async function POST(request: NextRequest) {
   // con `error`. Sin esto, un error no controlado devolvía un 500 en HTML y el
   // cliente sólo veía el mensaje genérico, sin pista de la causa.
   try {
-    const bytes = new Uint8Array(await archivo.arrayBuffer());
-
-    // 5. Texto plano primero. Es más preciso con los importes (los caracteres
+    // 6. Texto plano primero. Es más preciso con los importes (los caracteres
     //    salen del PDF, no de la lectura de una imagen) y gasta mucho menos.
     //    Si el PDF está escaneado no hay texto y caemos a visión.
     const extraido = await extraerTexto(bytes);
@@ -163,7 +200,7 @@ export async function POST(request: NextRequest) {
           { type: "text", text: promptExtraccion(incluirImpuestos) },
         ];
 
-    // 6. Claude.
+    // 7. Claude.
     const anthropic = new Anthropic();
     let respuesta;
 
@@ -224,12 +261,9 @@ export async function POST(request: NextRequest) {
       incluirImpuestos,
     );
 
-    if (consumos.length === 0 && ajuste === null) {
-      return error(
-        "En este PDF sólo encontramos saldos y pagos, ningún consumo.",
-        422,
-      );
-    }
+    // Aunque el filtro haya descartado todo, se muestra la revisión: las
+    // descartadas llegan destildadas y el usuario puede rescatar las que no
+    // son saldos ni pagos. (Sin ninguna línea, ya se cortó más arriba.)
 
     return NextResponse.json(
       {
@@ -239,6 +273,8 @@ export async function POST(request: NextRequest) {
         metodo,
         totalResumen: resultado.totalResumen,
         incluirImpuestos,
+        // Vuelve con la confirmación: se registra recién si se importa.
+        hash,
       },
       { headers: { "Cache-Control": "no-store" } },
     );
