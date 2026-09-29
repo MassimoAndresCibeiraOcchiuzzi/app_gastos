@@ -62,6 +62,15 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
   URL `?mes=` que el selector); en la tabla "Ver los números", los meses son
   links que hacen lo mismo
 
+**Dashboard, paso D**
+
+- [x] Barra apilada con el reparto de los egresos del mes por medio de pago
+  (Cuenta), con leyenda: etiqueta, % y monto de cada segmento
+- [x] Cuentas normalizadas (mayúsculas, acentos y espacios de más): "tarjeta",
+  "Tarjeta " y "TARJETA" son la misma
+- [x] Sin cuenta al final, rayada; más de 4 cuentas → "Otras (N)"
+- [x] Aviso cuando "Sin cuenta" supera el 30%
+
 **Fase 4**
 
 - [x] Botón "Exportar historial" en Movimientos
@@ -450,7 +459,7 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/components/categorias-mes.tsx` | Lista interactiva de categorías y su detalle desplegable |
 | `src/components/numero-principal.tsx` | "Gastaste $X en [mes]", comparación y balance |
 | `src/components/indicador-comparacion.tsx` | El ▲/▼ % contra el promedio, compartido |
-| `src/lib/dashboard.ts` | Filas, comparación contra el promedio, detalle de cada categoría y número principal |
+| `src/lib/dashboard.ts` | Filas, comparación contra el promedio, detalle de cada categoría, número principal y reparto por cuenta |
 | `src/app/actions/transacciones.ts` | Server actions de alta y borrado |
 | `src/app/actions/categorias.ts` | Server actions de crear y borrar categorías |
 | `src/components/selector-categoria.tsx` | Selector de categoría con alta inline |
@@ -466,6 +475,7 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/lib/validacion.ts` | Qué es una transacción válida (alta manual e importación) |
 | `src/components/` | Selector de mes, resumen, formulario, lista, navegación |
 | `src/components/graficos/` | Torta y barras (recharts) |
+| `src/components/graficos/reparto-cuentas.tsx` | Barra apilada de egresos por medio de pago (sin recharts) |
 | `src/lib/consultas.ts` | Lectura de transacciones, paginada con orden total (desempate por `id`) |
 | `src/lib/agregados.ts` | Totales por tipo, por categoría y por mes |
 | `src/lib/categorias.ts` | Categorías del sistema, su color y el largo máximo |
