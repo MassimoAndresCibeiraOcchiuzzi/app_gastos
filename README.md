@@ -56,6 +56,12 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
   promedio de los 3 meses anteriores y el balance del mes
 - [x] En el mes en curso: "(mes en curso)" y sin comparación
 
+**Dashboard, paso C**
+
+- [x] Tocar un mes en el gráfico de 6 meses cambia el mes del Dashboard (misma
+  URL `?mes=` que el selector); en la tabla "Ver los números", los meses son
+  links que hacen lo mismo
+
 **Fase 4**
 
 - [x] Botón "Exportar historial" en Movimientos
@@ -299,6 +305,14 @@ que cuando lo hay los dos totales difieren; una línea chica lo aclara y el
 centro de la torta dice "En categorías". La comparación usa la misma regla que
 las categorías (promedio de 3 meses, o el mes anterior con egresos, o nada) y
 no se muestra en el mes en curso ni en un mes sin egresos.
+
+**Tocar un mes en las barras.** La columna tocada se calcula con la posición
+del toque (y las medidas del gráfico, en constantes compartidas), no con el
+`onClick` de recharts: ése informa la columna "activa", que recharts actualiza
+al mover el mouse, y con el dedo llegaba siempre la primera. Los dos gráficos
+van con `accessibilityLayer={false}`: con la capa de accesibilidad de recharts
+el SVG queda enfocable adentro de un contenedor `aria-hidden`. Su versión
+accesible es la lista de categorías y la tabla de números.
 
 **Detalle de una categoría.** Todo sale de las transacciones que la página ya
 trae (6 meses): `filasCategoriasMes` arma en el servidor cada fila con su
