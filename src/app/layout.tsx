@@ -1,21 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import { CLASES_FUENTES } from "./fuentes";
 import ServiceWorkerRegister from "./service-worker-register";
-
-// Cuerpo: DM Sans, geométrica-humanista, muy legible en tamaños chicos.
-const dmSans = DM_Sans({
-  variable: "--font-sans",
-  subsets: ["latin"],
-});
-
-// Títulos y números destacados: Space Grotesk, geométrica con carácter
-// (estilo fintech). No es de las genéricas por defecto (Inter/Roboto/Arial).
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-});
 
 export const metadata: Metadata = {
   title: {
@@ -52,7 +38,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${dmSans.variable} ${spaceGrotesk.variable} h-full antialiased`}
+      className={`${CLASES_FUENTES} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {children}

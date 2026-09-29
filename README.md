@@ -410,6 +410,10 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/lib/categorias.ts` | Categorías del sistema, su color y el largo máximo |
 | `src/lib/formato.ts` | Pesos, fechas y navegación de meses |
 | `tests/` | Tests de esa lógica (`npm test`) |
+| `src/app/error.tsx` | Pantalla de error de cualquier sección (con "Reintentar") |
+| `src/app/global-error.tsx` | Pantalla de error si falla el layout raíz (trae sus propios estilos y fuentes) |
+| `src/app/not-found.tsx` | Página inexistente (404) |
+| `src/app/fuentes.ts` | Las dos fuentes de la app, compartidas por el layout y `global-error` |
 | `src/app/manifest.ts` | Manifest de la PWA |
 | `public/sw.js` | Service worker (fallback offline) |
 | `supabase/schema.sql` | Tabla `transacciones` + políticas RLS |
