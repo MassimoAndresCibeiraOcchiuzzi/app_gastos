@@ -66,7 +66,25 @@ export function transaccionesACSV(transacciones: Transaccion[]): string {
   return filasACSV(filas);
 }
 
-/** "2026-07-23" -> "gastos_2026-07-23.csv" */
+/**
+ * Todo el historial: la fecha de exportación.
+ * "2026-07-23" -> "gastos_2026-07-23.csv"
+ */
 export function nombreArchivoExport(fecha: string): string {
   return `gastos_${fecha}.csv`;
+}
+
+/** Sin tildes ni mayúsculas: el nombre del archivo anda igual en cualquier sistema. */
+const MESES_ARCHIVO = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/**
+ * Un mes: su nombre y año.
+ * "2026-09" -> "gastos_septiembre_2026.csv"
+ */
+export function nombreArchivoExportMes(mes: string): string {
+  const nombre = MESES_ARCHIVO[Number(mes.slice(5, 7)) - 1];
+  return `gastos_${nombre}_${mes.slice(0, 4)}.csv`;
 }

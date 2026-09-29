@@ -106,3 +106,10 @@ test("transaccionesACSV no se rompe con comas en la descripción", () => {
 test("nombreArchivoExport incluye la fecha", () => {
   assert.equal(nombreArchivoExport("2026-07-23"), "gastos_2026-07-23.csv");
 });
+
+test("nombreArchivoExportMes: mes en letras y año, sin tildes", async () => {
+  const { nombreArchivoExportMes } = await import("../src/lib/csv.ts");
+  assert.equal(nombreArchivoExportMes("2026-09"), "gastos_septiembre_2026.csv");
+  assert.equal(nombreArchivoExportMes("2026-01"), "gastos_enero_2026.csv");
+  assert.equal(nombreArchivoExportMes("2025-12"), "gastos_diciembre_2025.csv");
+});
