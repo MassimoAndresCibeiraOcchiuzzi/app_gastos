@@ -128,6 +128,33 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
 - [x] Cuánto falta, cuánto por mes de acá en adelante, ritmo reciente y fecha
       estimada (adelantado / a tiempo / atrasado)
 
+**Fase 10 — Cuotas comprometidas**
+
+- [x] Detección de la cuota en la descripción ("Cuota 03/06" y variantes)
+- [x] Agrupado de las cuotas de una misma compra a lo largo de los meses
+- [x] Tarjeta en el Dashboard: lo comprometido para el mes que viene, un mini
+      gráfico hasta la última cuota y el detalle de las compras
+
+### Sobre las cuotas
+
+`detectarCuota` (`src/lib/cuotas.ts`) reconoce, sin importar mayúsculas: la
+palabra **Cuota, Cuotas, Cuot, Cta, Ctas o C**, un separador opcional
+(`.` `:` `-` `#`), opcionalmente **N°/Nº/Nro**, y dos números de 1 o 2 dígitos
+separados por **`/`, `-` o `de`**, con o sin espacios. Ejemplos: `Cuota 03/06`,
+`CUOTA 3 DE 6`, `C.03/06`, `C03/06`, `Cta. 03/06`, `Cuota N° 3/6`,
+`(Cuota 03/06)`. Un `03/06` suelto, sin palabra, **no** se reconoce: no se
+distingue de una fecha. La cuota tiene que ir de 1 al total, y el total de 2 a
+60. Lo que no matchea queda fuera del cálculo, sin error.
+
+Dos cuotas son de la misma compra si coinciden el comercio (normalizado como
+las reglas por comercio), la cantidad de cuotas, el monto (al peso) y el mes
+de la primera cuota, que sale de la fecha: la cuota 3 registrada en septiembre
+es de una compra con la cuota 1 en julio. Dos cuotas con el mismo número en el
+mismo mes son dos compras iguales (se muestran "×2").
+
+La proyección arranca el mes que viene y sigue el calendario de cada compra,
+aunque falte importar algún mes. Se buscan compras en los últimos 12 meses.
+
 ### Sobre la meta de ahorro
 
 El **acumulado** es la suma de ingresos − egresos de cada mes, desde el mes de
@@ -561,12 +588,14 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/app/auth/callback/route.ts` | Canje del `?code=` del magic link (PKCE) |
 | `src/app/auth/confirm/route.ts` | Alternativa con `token_hash` (ver abajo) |
 | `src/app/page.tsx` | Movimientos: resumen + alta + lista del mes |
-| `src/app/dashboard/page.tsx` | Dashboard: presupuestos, meta de ahorro, torta con lista de categorías, medios de pago y barras de 6 meses |
+| `src/app/dashboard/page.tsx` | Dashboard: presupuestos, meta de ahorro, cuotas, torta con lista de categorías, medios de pago y barras de 6 meses |
 | `src/components/categorias-mes.tsx` | Lista interactiva de categorías y su detalle desplegable |
 | `src/components/numero-principal.tsx` | "Gastaste $X en [mes]", comparación y balance |
 | `src/components/indicador-comparacion.tsx` | El ▲/▼ % contra el promedio, compartido |
 | `src/lib/dashboard.ts` | Filas, comparación contra el promedio, detalle de cada categoría, número principal y reparto por cuenta |
 | `src/app/actions/transacciones.ts` | Server actions de alta, edición, borrado e importación |
+| `src/lib/cuotas.ts` | Parser de cuotas, agrupado por compra y proyección (puro, testeado) |
+| `src/components/cuotas-comprometidas.tsx` | Tarjeta de cuotas comprometidas del Dashboard |
 | `src/app/actions/metas.ts` | Server actions de guardar y borrar la meta de ahorro |
 | `src/lib/metas.ts` | Acumulado, ritmo, proyección y validación de la meta (puro, testeado) |
 | `src/components/meta-ahorro.tsx` | Tarjeta de la meta en el Dashboard y su formulario |
