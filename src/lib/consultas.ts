@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import type { MetaAhorro } from "@/lib/metas";
 import type { Presupuesto } from "@/lib/presupuestos";
 import type { ReglaCategoria } from "@/lib/reglas";
 import type { CategoriaUsuario, Transaccion } from "@/lib/types";
@@ -130,6 +131,33 @@ export async function traerPresupuestos(): Promise<{
       categoria: p.categoria as string,
       monto_mensual: Number(p.monto_mensual),
     })),
+    error: null,
+  };
+}
+
+/**
+ * Trae la meta de ahorro del usuario (hay una sola), o null si no tiene.
+ * Si la tabla no existe todavía (no corrieron supabase/metas_ahorro.sql),
+ * `error` lo dice: el Dashboard sigue andando y la tarjeta avisa.
+ */
+export async function traerMeta(): Promise<{
+  meta: MetaAhorro | null;
+  error: string | null;
+}> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("metas_ahorro")
+    .select("nombre, monto_objetivo, fecha_inicio, fecha_objetivo")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[metas] no se pudo leer:", error.message);
+    return { meta: null, error: error.message };
+  }
+  if (!data) return { meta: null, error: null };
+  // `numeric` puede llegar como string según el driver.
+  return {
+    meta: { ...(data as MetaAhorro), monto_objetivo: Number(data.monto_objetivo) },
     error: null,
   };
 }

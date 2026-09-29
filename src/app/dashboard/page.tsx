@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   traerCategoriasUsuario,
+  traerMeta,
   traerPresupuestos,
   traerTransacciones,
 } from "@/lib/consultas";
@@ -9,6 +10,7 @@ import Encabezado from "@/components/encabezado";
 import Navegacion from "@/components/navegacion";
 import SelectorMes from "@/components/selector-mes";
 import CategoriasMes from "@/components/categorias-mes";
+import MetaAhorroTarjeta from "@/components/meta-ahorro";
 import NumeroPrincipal from "@/components/numero-principal";
 import PresupuestosMes from "@/components/presupuestos-mes";
 import BarrasMeses from "@/components/graficos/barras-meses";
@@ -16,6 +18,7 @@ import RepartoCuentas from "@/components/graficos/reparto-cuentas";
 import { totalesPorMes } from "@/lib/agregados";
 import { CATEGORIAS_CONSUMO } from "@/lib/categorias";
 import { filasCategoriasMes, repartoPorCuenta, resumenMes } from "@/lib/dashboard";
+import { progresoMeta, rangoParaMeta } from "@/lib/metas";
 import { avanceDelMes, progresoPresupuestos } from "@/lib/presupuestos";
 import {
   esMesValido,
@@ -52,11 +55,24 @@ export default async function Dashboard({
   // las barras, las comparaciones y el mini gráfico de cada categoría, los 6
   // meses que terminan en él.
   const meses = ultimosMeses(mes, MESES_COMPARADOS);
-  const [{ transacciones, error }, presupuestos, propias] = await Promise.all([
+  const [{ transacciones, error }, presupuestos, propias, meta] = await Promise.all([
     traerTransacciones({ desde: `${meses[0]}-01`, hasta: rangoMes(mes).hasta }),
     traerPresupuestos(),
     traerCategoriasUsuario(),
+    traerMeta(),
   ]);
+
+  // La meta se mira siempre desde hoy, no desde el mes elegido: necesita sus
+  // propios meses (desde que empezó, y los 6 anteriores para el ritmo).
+  const hoy = hoyISO();
+  let progreso = null;
+  let errorMeta = meta.error;
+  if (meta.meta) {
+    const datosMeta = await traerTransacciones(rangoParaMeta(meta.meta, mesDeHoy));
+    // Con transacciones incompletas el acumulado mentiría: mejor no mostrarlo.
+    if (datosMeta.error) errorMeta = datosMeta.error;
+    else progreso = progresoMeta(meta.meta, datosMeta.transacciones, hoy);
+  }
 
   // Filas de la lista (= porciones de la torta), con su comparación y su
   // detalle ya armados. El total es la suma de las porciones (consumos), no el
@@ -74,7 +90,7 @@ export default async function Dashboard({
   const { segmentos: porCuenta } = repartoPorCuenta(transacciones, mes);
 
   // Presupuestos: lo gastado de cada tope contra lo que pasó del mes.
-  const avance = avanceDelMes(mes, hoyISO());
+  const avance = avanceDelMes(mes, hoy);
   const filasPresupuesto = progresoPresupuestos(
     transacciones,
     mes,
@@ -117,6 +133,15 @@ export default async function Dashboard({
               categorias={categoriasPresupuestables}
               presupuestos={presupuestos.presupuestos}
               error={presupuestos.error}
+            />
+          </Tarjeta>
+
+          <Tarjeta titulo="Meta de ahorro">
+            <MetaAhorroTarjeta
+              meta={meta.meta}
+              progreso={progreso}
+              hoy={hoy}
+              error={errorMeta}
             />
           </Tarjeta>
 
