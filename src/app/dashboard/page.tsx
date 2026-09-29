@@ -10,6 +10,7 @@ import Encabezado from "@/components/encabezado";
 import Navegacion from "@/components/navegacion";
 import SelectorMes from "@/components/selector-mes";
 import CategoriasMes from "@/components/categorias-mes";
+import CuotasComprometidas from "@/components/cuotas-comprometidas";
 import MetaAhorroTarjeta from "@/components/meta-ahorro";
 import NumeroPrincipal from "@/components/numero-principal";
 import PresupuestosMes from "@/components/presupuestos-mes";
@@ -18,6 +19,7 @@ import RepartoCuentas from "@/components/graficos/reparto-cuentas";
 import { totalesPorMes } from "@/lib/agregados";
 import { CATEGORIAS_CONSUMO } from "@/lib/categorias";
 import { filasCategoriasMes, repartoPorCuenta, resumenMes } from "@/lib/dashboard";
+import { MESES_CUOTAS, comprasEnCuotas, proyectarCuotas } from "@/lib/cuotas";
 import { progresoMeta, rangoParaMeta } from "@/lib/metas";
 import { avanceDelMes, progresoPresupuestos } from "@/lib/presupuestos";
 import {
@@ -26,6 +28,7 @@ import {
   hoyISO,
   mesActual,
   rangoMes,
+  sumarMeses,
   ultimosMeses,
 } from "@/lib/formato";
 
@@ -55,12 +58,22 @@ export default async function Dashboard({
   // las barras, las comparaciones y el mini gráfico de cada categoría, los 6
   // meses que terminan en él.
   const meses = ultimosMeses(mes, MESES_COMPARADOS);
-  const [{ transacciones, error }, presupuestos, propias, meta] = await Promise.all([
-    traerTransacciones({ desde: `${meses[0]}-01`, hasta: rangoMes(mes).hasta }),
-    traerPresupuestos(),
-    traerCategoriasUsuario(),
-    traerMeta(),
-  ]);
+  const [{ transacciones, error }, presupuestos, propias, meta, datosCuotas] =
+    await Promise.all([
+      traerTransacciones({ desde: `${meses[0]}-01`, hasta: rangoMes(mes).hasta }),
+      traerPresupuestos(),
+      traerCategoriasUsuario(),
+      traerMeta(),
+      // Las cuotas se miran desde hoy, como la meta: los últimos 12 meses.
+      traerTransacciones({
+        desde: `${sumarMeses(mesDeHoy, -(MESES_CUOTAS - 1))}-01`,
+        hasta: rangoMes(mesDeHoy).hasta,
+      }),
+    ]);
+  // Con datos incompletos no se proyecta: la tarjeta de cuotas no aparece.
+  const cuotas = datosCuotas.error
+    ? null
+    : proyectarCuotas(comprasEnCuotas(datosCuotas.transacciones), mesDeHoy);
 
   // La meta se mira siempre desde hoy, no desde el mes elegido: necesita sus
   // propios meses (desde que empezó, y los 6 anteriores para el ritmo).
@@ -144,6 +157,12 @@ export default async function Dashboard({
               error={errorMeta}
             />
           </Tarjeta>
+
+          {cuotas && (
+            <Tarjeta titulo="Cuotas comprometidas">
+              <CuotasComprometidas proyeccion={cuotas} mesHoy={mesDeHoy} />
+            </Tarjeta>
+          )}
 
           <Tarjeta titulo="Egresos por categoría">
             <CategoriasMes
