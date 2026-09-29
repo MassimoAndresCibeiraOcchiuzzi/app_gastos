@@ -1,5 +1,6 @@
 import type { Transaccion } from "@/lib/types";
 import { formatearARSConSigno, formatearFechaCorta } from "@/lib/formato";
+import BotonEditar from "./boton-editar";
 import BotonEliminar from "./boton-eliminar";
 
 export default function ListaTransacciones({
@@ -45,7 +46,12 @@ export default function ListaTransacciones({
               {formatearARSConSigno(esIngreso ? t.monto : -t.monto)}
             </div>
 
-            <BotonEliminar id={t.id} descripcion={t.descripcion} />
+            {/* Juntos y sin espacio extra: en el celular cada px de la
+                descripción cuenta. */}
+            <div className="flex shrink-0">
+              <BotonEditar transaccion={t} />
+              <BotonEliminar id={t.id} descripcion={t.descripcion} />
+            </div>
           </li>
         );
       })}

@@ -27,6 +27,7 @@ import {
   type Metodo,
   type TotalResumen,
 } from "@/lib/extraccion";
+import { claveComercio, type PedidoRegla } from "@/lib/reglas";
 import type { EntradaTransaccion } from "@/lib/validacion";
 
 const INPUT = CAMPO_COMPACTO;
@@ -45,6 +46,15 @@ type Fila = {
   monto: string;
   tipo: "ingreso" | "egreso";
   categoria: string;
+  /**
+   * La categoría con la que llegó (de la IA o de una regla). Si la cambiás, se
+   * ofrece recordarla para ese comercio.
+   */
+  categoriaInicial: string;
+  /** Si la categoría inicial salió de una regla tuya, su patrón. */
+  regla?: string;
+  /** Recordar la categoría corregida para este comercio (tildado de entrada). */
+  recordar: boolean;
   /**
    * El ajuste neteado de impuestos. No es un consumo: su tipo queda fijo en
    * egreso y su monto puede ser negativo (más devoluciones que percepciones).
@@ -76,14 +86,28 @@ type Estado =
  * donde se testea.
  */
 function aFila(item: ItemExtraido, id: number, fechaImputacion: string): Fila {
+  const campos = aCamposGuardables(item);
   return {
     id,
     incluir: true,
     fecha: fechaImputacion,
     fechaOriginal: item.fecha,
     fechaEditada: false,
-    ...aCamposGuardables(item),
+    ...campos,
+    categoriaInicial: campos.categoria,
+    regla: item.regla,
+    recordar: true,
   };
+}
+
+/**
+ * ¿Hay que ofrecer recordar la categoría de esta fila? Sólo si la cambiaste,
+ * no es el ajuste de impuestos y la descripción tiene un comercio
+ * reconocible. Devuelve el patrón que se guardaría, o null.
+ */
+function patronParaRecordar(fila: Fila): string | null {
+  if (fila.esAjuste || fila.categoria === fila.categoriaInicial) return null;
+  return claveComercio(fila.descripcion);
 }
 
 /** Una línea descartada por el filtro: misma fila, pero destildada. */
@@ -115,6 +139,8 @@ function aFilaAjuste(ajuste: Ajuste, id: number, fechaImputacion: string): Fila 
     monto: ajuste.neto.toFixed(2),
     tipo: "egreso",
     categoria: CATEGORIA_AJUSTES,
+    categoriaInicial: CATEGORIA_AJUSTES,
+    recordar: false,
     esAjuste: true,
   };
 }
@@ -144,6 +170,7 @@ export default function ImportarPdf({
   // Default destildado: no importar impuestos, que es el comportamiento base.
   const [incluirImpuestos, setIncluirImpuestos] = useState(false);
   const [importadas, setImportadas] = useState(0);
+  const [reglasGuardadas, setReglasGuardadas] = useState(0);
   const [, iniciar] = useTransition();
   const archivoRef = useRef<HTMLInputElement>(null);
 
@@ -327,14 +354,26 @@ export default function ImportarPdf({
       // "Ajustes tarjeta".
     }));
 
+    // Las categorías corregidas que pediste recordar, sólo de filas que se
+    // importan. El patrón lo calcula el servidor de nuevo: acá va la
+    // descripción tal cual.
+    const reglas: PedidoRegla[] = incluidas
+      .filter((f) => f.recordar && patronParaRecordar(f) !== null)
+      .map((f) => ({ descripcion: f.descripcion, categoria: f.categoria }));
+
     iniciar(async () => {
-      const resultado = await importarTransacciones(entradas, hash ?? undefined);
+      const resultado = await importarTransacciones(
+        entradas,
+        hash ?? undefined,
+        reglas,
+      );
       if (!resultado.ok) {
         setError(resultado.error);
         setEstado("revisando");
         return;
       }
       setImportadas(resultado.importadas);
+      setReglasGuardadas(resultado.reglasGuardadas);
       setFilas([]);
       setEstado("listo");
     });
@@ -354,6 +393,7 @@ export default function ImportarPdf({
 
   /** Una fila de la revisión. La usan la lista principal y la de descartadas. */
   function renderFila(fila: Fila) {
+    const patron = patronParaRecordar(fila);
     return (
       <li
         key={fila.id}
@@ -456,6 +496,9 @@ export default function ImportarPdf({
           {fila.esAjuste
             ? "Neto de impuestos y percepciones del resumen"
             : `Compra del ${formatearFechaNumerica(fila.fechaOriginal)}`}
+          {fila.regla && fila.categoria === fila.categoriaInicial && (
+            <span>{` · categoría por tu regla “${fila.regla}”`}</span>
+          )}
           {fila.motivoDescarte && (
             <span className="text-amber-700 dark:text-amber-400">
               {` · descartada: coincide con “${fila.motivoDescarte}”`}
@@ -474,6 +517,23 @@ export default function ImportarPdf({
             </>
           )}
         </p>
+
+        {patron && (
+          <label className="animar-entrada mt-1.5 ml-[26px] flex cursor-pointer items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={fila.recordar}
+              onChange={(e) => editar(fila.id, "recordar", e.target.checked)}
+              className="mt-px h-3.5 w-3.5 shrink-0 accent-current"
+            />
+            <span>
+              Aplicar siempre a este comercio{" "}
+              <span className="opacity-60">
+                (lo de “{patron}” → {fila.categoria})
+              </span>
+            </span>
+          </label>
+        )}
       </li>
     );
   }
@@ -486,6 +546,13 @@ export default function ImportarPdf({
           {importadas === 1 ? "transacción" : "transacciones"} a{" "}
           <span className="first-letter:uppercase">{nombreMes(mesResumen)}</span>.
         </p>
+        {reglasGuardadas > 0 && (
+          <p className="mt-1 text-xs opacity-60">
+            Y recordamos {reglasGuardadas}{" "}
+            {reglasGuardadas === 1 ? "comercio" : "comercios"} para el próximo
+            resumen. Las reglas se ven y se borran en Movimientos → Categorías.
+          </p>
+        )}
         <button
           type="button"
           onClick={empezarDeNuevo}

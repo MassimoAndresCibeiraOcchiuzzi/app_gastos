@@ -2,21 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 import { colorDeCategoria } from "@/lib/categorias";
+import type { ReglaCategoria } from "@/lib/reglas";
 import type { CategoriaUsuario } from "@/lib/types";
 import type { ResultadoEliminar } from "@/app/actions/categorias";
+import { eliminarRegla } from "@/app/actions/reglas";
 
 /**
  * Modal para ver y borrar las categorías personalizadas. Las 8 del sistema no
  * se listan acá: no se pueden borrar. Todo el flujo (confirmar, avisar que
  * tiene transacciones) usa UI propia de la app; nada de window.confirm nativo,
  * que en la PWA instalada no es confiable.
+ *
+ * Abajo, las reglas por comercio ("COTO" → Comida) que se crearon al corregir
+ * categorías, para borrar las que estén mal.
  */
 export default function GestorCategorias({
   custom,
   eliminar,
+  reglas,
 }: {
   custom: CategoriaUsuario[];
   eliminar: (id: string) => Promise<ResultadoEliminar>;
+  reglas: ReglaCategoria[];
 }) {
   const [abierto, setAbierto] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -41,10 +48,12 @@ export default function GestorCategorias({
         Categorías
       </button>
 
+      {/* `viz`: los colores de categoría (--viz-*) se definen dentro de esa
+          clase; sin ella los puntos de color no se veían fuera del Dashboard. */}
       <dialog
         ref={dialogRef}
         onClose={() => setAbierto(false)}
-        className="m-auto w-[min(28rem,92vw)] rounded-xl border border-black/10 bg-background p-0 text-foreground backdrop:bg-black/40 dark:border-white/15"
+        className="viz m-auto max-h-[85vh] w-[min(28rem,92vw)] rounded-xl border border-black/10 bg-background p-0 text-foreground backdrop:bg-black/40 dark:border-white/15"
       >
         <div className="flex flex-col gap-4 p-5">
           <div className="flex items-start justify-between gap-4">
@@ -76,6 +85,8 @@ export default function GestorCategorias({
               ))}
             </ul>
           )}
+
+          <ReglasPorComercio reglas={reglas} />
         </div>
       </dialog>
     </>
@@ -178,6 +189,100 @@ function FilaCategoria({
         </p>
       )}
     </li>
+  );
+}
+
+/**
+ * Las reglas por comercio. Borrar una es de un toque, sin confirmación: no
+ * toca ninguna transacción, y se vuelve a crear corrigiendo la categoría de
+ * ese comercio. Para cambiar el destino de una regla alcanza con corregir de
+ * nuevo: se pisa.
+ *
+ * La lista llega por props (el servidor la revalida al borrar); `borradas`
+ * sólo la esconde apenas se toca, sin esperar la vuelta.
+ */
+function ReglasPorComercio({ reglas }: { reglas: ReglaCategoria[] }) {
+  const [borradas, setBorradas] = useState<Set<string>>(() => new Set());
+  const [borrando, setBorrando] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const visibles = reglas.filter((r) => !borradas.has(r.id));
+
+  async function borrar(regla: ReglaCategoria) {
+    setBorrando(regla.id);
+    setError(null);
+    const resultado = await eliminarRegla(regla.id);
+    setBorrando(null);
+    if (resultado.ok) {
+      setBorradas((b) => new Set(b).add(regla.id));
+    } else {
+      setError(resultado.error);
+    }
+  }
+
+  return (
+    <section
+      aria-labelledby="titulo-reglas"
+      className="flex flex-col gap-2 border-t border-black/10 pt-4 dark:border-white/15"
+    >
+      <div>
+        <h2 id="titulo-reglas" className="text-base font-semibold">
+          Reglas por comercio
+        </h2>
+        <p className="mt-0.5 text-xs opacity-60">
+          Al importar un resumen, lo de estos comercios va directo a su
+          categoría. Se crean cuando corregís la categoría de un gasto.
+        </p>
+      </div>
+
+      {visibles.length === 0 ? (
+        <p className="py-3 text-center text-sm opacity-60">
+          Todavía no hay reglas.
+        </p>
+      ) : (
+        <ul className="flex flex-col divide-y divide-black/10 dark:divide-white/10">
+          {visibles.map((r) => (
+            <li key={r.id} className="flex items-center gap-2.5 py-2">
+              <span className="min-w-0 flex-1 text-sm">
+                <span className="block truncate font-medium">
+                  {r.patron_comercio}
+                </span>
+                <span className="flex items-center gap-1.5 text-xs opacity-70">
+                  <span
+                    aria-hidden
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: colorDeCategoria(r.categoria) }}
+                  />
+                  <span className="truncate">{r.categoria}</span>
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => borrar(r)}
+                disabled={borrando !== null}
+                aria-label={`Borrar la regla de ${r.patron_comercio}`}
+                className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs text-rose-600 transition-colors hover:bg-rose-500/10 disabled:opacity-40 dark:text-rose-400"
+              >
+                {borrando === r.id ? (
+                  "Borrando…"
+                ) : (
+                  <>
+                    <IconoBasura />
+                    Borrar
+                  </>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {error && (
+        <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
+          No se pudo borrar: {error}
+        </p>
+      )}
+    </section>
   );
 }
 

@@ -102,6 +102,17 @@ export async function eliminarCategoria(
   const { error } = await supabase.from("categorias").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
 
+  // Las reglas que mandaban a esta categoría ya no tienen destino. Al importar
+  // se ignorarían igual, pero seguirían listadas en el gestor. Si esto falla
+  // (p. ej. la tabla de reglas no existe), la categoría ya se borró: sigue.
+  const { error: errorReglas } = await supabase
+    .from("reglas_categoria")
+    .delete()
+    .eq("categoria", categoria.nombre);
+  if (errorReglas) {
+    console.error("[categorias] no se pudieron borrar sus reglas:", errorReglas.message);
+  }
+
   revalidar();
   return { ok: true };
 }

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import type { ReglaCategoria } from "@/lib/reglas";
 import type { CategoriaUsuario, Transaccion } from "@/lib/types";
 
 const POR_PAGINA = 1000; // tope que devuelve PostgREST por request
@@ -82,4 +83,24 @@ export async function traerCategoriasUsuario(): Promise<CategoriaUsuario[]> {
 
   if (error) return [];
   return (data ?? []) as CategoriaUsuario[];
+}
+
+/**
+ * Trae las reglas de categoría por comercio del usuario, por patrón.
+ * Igual que las categorías: si la tabla no existe todavía (no corrieron
+ * supabase/reglas_categoria.sql) o la consulta falla, lista vacía. Sin
+ * reglas, la importación sigue con la sugerencia de la IA.
+ */
+export async function traerReglas(): Promise<ReglaCategoria[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("reglas_categoria")
+    .select("id, patron_comercio, categoria")
+    .order("patron_comercio", { ascending: true });
+
+  if (error) {
+    console.error("[reglas] no se pudieron leer:", error.message);
+    return [];
+  }
+  return (data ?? []) as ReglaCategoria[];
 }

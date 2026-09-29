@@ -21,6 +21,11 @@ export type ItemExtraido = {
    * validado contra las categorías del usuario: si no existía, "Otros".
    */
   categoria: string;
+  /**
+   * Si la categoría salió de una regla del usuario ("COTO" → Comida) y no de
+   * la IA, el patrón de esa regla. Ver `aplicarReglas`.
+   */
+  regla?: string;
 };
 
 /**
@@ -108,8 +113,12 @@ export function normalizarDescripcion(texto: string): string {
     .replace(/[^A-Z0-9]/g, "");
 }
 
-/** Las palabras de un texto, en MAYÚSCULAS y sin tildes: "Dev. Imp." → [DEV, IMP]. */
-function palabras(texto: string): string[] {
+/**
+ * Las palabras de un texto, en MAYÚSCULAS y sin tildes: "Dev. Imp." → [DEV, IMP].
+ * La usan también las reglas por comercio (`reglas.ts`), para reconocer las
+ * mismas variantes de escritura que el filtro.
+ */
+export function palabras(texto: string): string[] {
   return texto
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
@@ -125,7 +134,7 @@ function palabras(texto: string): string[] {
  * palabra: "PERCEP" no coincide con "PERCEPTRON", ni "SALDO ACTUAL" con
  * "SALDO ACTUALIZADO".
  */
-function contieneClave(tokens: string[], clave: string): boolean {
+export function contieneClave(tokens: string[], clave: string): boolean {
   for (let i = 0; i < tokens.length; i++) {
     let pegado = "";
     for (let j = i; j < tokens.length; j++) {

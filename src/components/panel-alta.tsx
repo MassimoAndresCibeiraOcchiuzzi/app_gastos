@@ -2,38 +2,31 @@
 
 import FormularioTransaccion from "@/components/formulario-transaccion";
 import GestorCategorias from "@/components/gestor-categorias";
-import { useCategorias } from "@/components/use-categorias";
-import type { CategoriaUsuario } from "@/lib/types";
+import { useMovimientos } from "@/components/proveedor-movimientos";
 
 /**
- * Junta el alta de transacciones con el gestor de categorías para que
- * compartan la misma lista: si creás una categoría desde el selector, aparece
- * al toque en el modal, y si la borrás en el modal, desaparece del selector.
+ * El alta de transacciones y el gestor de categorías. La lista de categorías
+ * la comparten con la edición de cada fila, vía `ProveedorMovimientos`: si
+ * creás una categoría desde el selector, aparece al toque en el modal, y si
+ * la borrás en el modal, desaparece del selector.
  */
 export default function PanelAlta({
   fechaPorDefecto,
-  cuentasConocidas,
-  categoriasIniciales,
 }: {
   fechaPorDefecto: string;
-  cuentasConocidas: string[];
-  categoriasIniciales: CategoriaUsuario[];
 }) {
-  const { custom, nombres, crear, eliminar } = useCategorias(categoriasIniciales);
+  const { custom, eliminar, reglas } = useMovimientos();
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex justify-end">
-        <GestorCategorias custom={custom} eliminar={eliminar} />
+        <GestorCategorias custom={custom} eliminar={eliminar} reglas={reglas} />
       </div>
       {/* key={fechaPorDefecto}: al cambiar de mes el form se rearma con la
-          fecha nueva, pero la lista de categorías (arriba) se mantiene. */}
+          fecha nueva, pero la lista de categorías se mantiene. */}
       <FormularioTransaccion
         key={fechaPorDefecto}
         fechaPorDefecto={fechaPorDefecto}
-        cuentasConocidas={cuentasConocidas}
-        categorias={nombres}
-        onCrearCategoria={crear}
       />
     </div>
   );

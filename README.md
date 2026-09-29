@@ -96,6 +96,39 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
 - [x] No deja borrar una categoría que tiene transacciones (avisa cuántas)
 - [x] Dashboard y torta reflejan las nuevas sin tocar código
 
+**Fase 7 — Editar y reglas por comercio**
+
+- [x] Lápiz en cada fila de Movimientos: abre el mismo formulario del alta,
+      precargado (monto, fecha, descripción, tipo, categoría y cuenta)
+- [x] La edición pasa por la misma validación que el alta y los mismos CHECK
+      de la base; usa la política de UPDATE de `transacciones`
+- [x] Tabla `reglas_categoria` con RLS (SQL en `supabase/reglas_categoria.sql`)
+- [x] Al corregir una categoría (editando o en la revisión del import):
+      "Aplicar siempre a este comercio", tildado de entrada
+- [x] Al importar, la regla del comercio pisa la sugerencia de la IA y la fila
+      dice "categoría por tu regla"
+- [x] Las reglas se ven y se borran en el modal "Categorías"
+
+### Sobre las reglas por comercio
+
+El patrón de una regla es el nombre del comercio normalizado con la misma
+lógica que el filtro de importación (`palabras` en `src/lib/extraccion.ts`):
+mayúsculas, sin tildes, cortado en cualquier separador. Además se sacan los
+números sueltos y la indicación de cuota, así "Coto Suc. 45" y "COTO SUC 123"
+dan el mismo patrón, `COTO SUC`. Una regla aplica si sus palabras aparecen
+completas y seguidas en la descripción: `COTO` coincide con "MERPAGO*COTO 9"
+pero no con "COTORRA". Si coinciden varias, gana la más larga.
+
+**No ahorra tokens.** La IA tiene que leer el resumen igual para saber qué
+comercios hay, y la categoría es una palabra por ítem de la respuesta. Lo que
+da la regla es que una corrección no se repita en cada resumen. Se aplica en el
+servidor, con la respuesta de la IA en la mano (`aplicarReglas`). Una regla que
+apunta a una categoría que ya no existe se ignora; borrar una categoría propia
+borra sus reglas.
+
+Corregir otra vez el mismo comercio pisa la regla (upsert por usuario y
+patrón): para cambiar una regla alcanza con corregir de nuevo.
+
 ### Sobre las categorías
 
 Las **del sistema** (Comida, Transporte, Suscripciones, Alquiler, Servicios,
@@ -104,8 +137,9 @@ Entretenimiento, Salud, Otros y **Tarjeta**) viven en código
 versionadas, sin sembrar nada por usuario. La tabla `categorias` guarda **sólo
 las personalizadas**, con RLS para que cada uno vea las suyas.
 
-**Tarjeta** es la categoría por defecto de todo lo que se importa de un resumen:
-la importación ya no le pide una categoría por ítem a la IA (ver más abajo).
+**Tarjeta** es un medio de pago, no un rubro: al importar un resumen, la IA
+sugiere el rubro de cada consumo (o lo pone una regla tuya) y "Tarjeta" va en
+la cuenta. Se puede seguir eligiendo a mano.
 
 Las transacciones guardan la categoría como **texto**, no como id: por eso una
 categoría se puede borrar sólo si no la usa ninguna transacción, y por eso la
@@ -428,6 +462,10 @@ Y [`supabase/resumenes_importados.sql`](supabase/resumenes_importados.sql), para
 avisar cuando subís un resumen que ya importaste (sin ella se importa igual,
 pero sin el aviso).
 
+Y [`supabase/reglas_categoria.sql`](supabase/reglas_categoria.sql), para las
+reglas por comercio. Sin ella todo funciona igual, pero "Aplicar siempre a
+este comercio" avisa que no pudo guardar la regla.
+
 ### 3. Configurar las URLs de Auth
 
 Supabase Dashboard → **Authentication → URL Configuration**:
@@ -460,11 +498,16 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/components/numero-principal.tsx` | "Gastaste $X en [mes]", comparación y balance |
 | `src/components/indicador-comparacion.tsx` | El ▲/▼ % contra el promedio, compartido |
 | `src/lib/dashboard.ts` | Filas, comparación contra el promedio, detalle de cada categoría, número principal y reparto por cuenta |
-| `src/app/actions/transacciones.ts` | Server actions de alta y borrado |
+| `src/app/actions/transacciones.ts` | Server actions de alta, edición, borrado e importación |
+| `src/app/actions/reglas.ts` | Server action de borrar una regla por comercio |
+| `src/lib/reglas.ts` | Patrón de comercio, búsqueda y aplicación de reglas (puro, testeado) |
+| `src/lib/reglas-servidor.ts` | Guardado de reglas (upsert), sólo servidor |
+| `src/components/proveedor-movimientos.tsx` | Comparte categorías, cuentas y reglas en Movimientos |
+| `src/components/boton-editar.tsx` | Lápiz de cada fila: modal con el formulario precargado |
 | `src/app/actions/categorias.ts` | Server actions de crear y borrar categorías |
 | `src/components/selector-categoria.tsx` | Selector de categoría con alta inline |
 | `src/components/use-categorias.ts` | Estado compartido de categorías propias |
-| `src/components/gestor-categorias.tsx` | Modal para ver y borrar las propias |
+| `src/components/gestor-categorias.tsx` | Modal para ver y borrar las propias y las reglas por comercio |
 | `src/app/api/exportar/route.ts` | Genera y sirve el CSV del historial |
 | `src/lib/csv.ts` | Armado y escapado del CSV |
 | `src/app/importar/page.tsx` | Pantalla de importación de resúmenes |
@@ -493,6 +536,7 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `supabase/checks_transacciones.sql` | CHECK constraints de `transacciones` |
 | `supabase/resumenes_importados.sql` | Hashes de los PDF importados, para avisar repetidos |
 | `supabase/diagnostico_checks.sql` | Qué filas existentes violarían esos CHECKs (sólo lectura) |
+| `supabase/reglas_categoria.sql` | Reglas de categoría por comercio + políticas RLS |
 
 ## Cómo agregar una funcionalidad nueva
 

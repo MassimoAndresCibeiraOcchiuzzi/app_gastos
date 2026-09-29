@@ -7,8 +7,9 @@ import {
   mensajeConTexto,
   promptExtraccion,
 } from "@/lib/extraccion-prompt";
-import { categoriasParaSugerir } from "@/lib/categorias";
-import { traerCategoriasUsuario } from "@/lib/consultas";
+import { CATEGORIAS_CONSUMO, categoriasParaSugerir } from "@/lib/categorias";
+import { traerCategoriasUsuario, traerReglas } from "@/lib/consultas";
+import { aplicarReglas } from "@/lib/reglas";
 import {
   LARGO_FIRMA_PDF,
   LIMITE_IMPORTACIONES,
@@ -187,7 +188,10 @@ export async function POST(request: NextRequest) {
     // del sistema y las propias del usuario. La misma lista va al prompt, al
     // `enum` del esquema y a la validación de la respuesta. Si no se pueden
     // leer las propias, se sigue con las del sistema.
-    const propias = await traerCategoriasUsuario();
+    const [propias, reglas] = await Promise.all([
+      traerCategoriasUsuario(),
+      traerReglas(),
+    ]);
     const categorias = categoriasParaSugerir(propias.map((c) => c.nombre));
 
     const contenido: Anthropic.ContentBlockParam[] = extraido
@@ -261,12 +265,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Las reglas del usuario ("COTO" → Comida) pisan la categoría que sugirió
+    // la IA. Van contra todo lo que el usuario puede elegir (incluida
+    // "Tarjeta", si la eligió a propósito), no sólo contra lo que se le ofrece
+    // a la IA. Ver `aplicarReglas`.
+    //
+    // No ahorra tokens: la IA tiene que leer el resumen igual para saber qué
+    // comercios hay, y la categoría es una palabra por ítem de la respuesta.
+    // Lo que da es que una corrección no se repita en cada resumen.
+    const conReglas = aplicarReglas(resultado.items, reglas, [
+      ...CATEGORIAS_CONSUMO,
+      ...propias.map((c) => c.nombre),
+    ]);
+    const porRegla = conReglas.filter((i) => i.regla).length;
+    if (porRegla > 0) {
+      console.info(`[importar] ${porRegla} ítems categorizados por regla`);
+    }
+
     // Red de seguridad: el prompt le pide al modelo qué traer y qué no, pero a
     // veces igual se cuela algo. Acá se clasifica por código, con la respuesta
     // ya en la mano, respetando el toggle: los impuestos se importan sólo si
     // estaba tildado; si no, van al mismo montón que los saldos y pagos.
     const { consumos, ajuste, descartados } = clasificarItems(
-      resultado.items,
+      conReglas,
       incluirImpuestos,
     );
 
