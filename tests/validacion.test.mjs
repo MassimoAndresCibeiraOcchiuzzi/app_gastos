@@ -45,41 +45,74 @@ test("validarTransaccion rechaza montos que no sirven", () => {
   }
 });
 
-test("validarTransaccion acepta monto negativo sólo con el permiso", () => {
-  // El ajuste de impuestos: egreso negativo (crédito neto).
-  const conPermiso = validarTransaccion({
-    ...base,
-    monto: "-17197,39",
-    permitirMontoNegativo: true,
-  });
-  assert.equal(conPermiso.ok, true);
-  assert.equal(conPermiso.valor.monto, -17197.39);
+const ajuste = { ...base, categoria: "Ajustes tarjeta", tipo: "egreso" };
 
-  // Sin el permiso (alta manual), el negativo sigue rechazado.
-  const sinPermiso = validarTransaccion({ ...base, monto: "-17197,39" });
-  assert.equal(sinPermiso.ok, false);
-  assert.ok(sinPermiso.errores.monto);
+test("validarTransaccion acepta monto negativo sólo en el ajuste egreso", () => {
+  // El ajuste de impuestos: egreso negativo (crédito neto).
+  const r = validarTransaccion({ ...ajuste, monto: "-17197,39" });
+  assert.equal(r.ok, true);
+  assert.equal(r.valor.monto, -17197.39);
+  assert.equal(r.valor.categoria, "Ajustes tarjeta");
 });
 
-test("validarTransaccion rechaza cero incluso con el permiso", () => {
+test("validarTransaccion rechaza el negativo en cualquier otra combinación", () => {
+  const casos = [
+    { ...base, monto: "-500" }, // consumo común
+    { ...ajuste, tipo: "ingreso", monto: "-500" }, // ajuste pero ingreso
+    { ...base, categoria: "ajustes tarjeta", monto: "-500" }, // otra mayúscula
+    { ...base, categoria: "Tarjeta", monto: "-500" },
+  ];
+  for (const caso of casos) {
+    const r = validarTransaccion(caso);
+    assert.equal(r.ok, false, JSON.stringify(caso));
+    assert.ok(r.errores.monto);
+  }
+});
+
+test("validarTransaccion ignora un permitirMontoNegativo que mande el cliente", () => {
+  // Así llegaba antes el permiso: ahora es un campo cualquiera, sin efecto.
   const r = validarTransaccion({
     ...base,
-    monto: "0",
+    monto: "-500",
     permitirMontoNegativo: true,
   });
   assert.equal(r.ok, false);
   assert.ok(r.errores.monto);
 });
 
-test("validarTransaccion acepta la categoría Ajustes tarjeta", () => {
+test("validarTransaccion acepta el ajuste en positivo y el negativo con espacios", () => {
+  assert.equal(validarTransaccion({ ...ajuste, monto: "500" }).ok, true);
+  // La categoría se recorta antes de decidir, igual que lo que se guarda.
   const r = validarTransaccion({
-    ...base,
+    ...ajuste,
+    categoria: "  Ajustes tarjeta ",
     monto: "-500",
-    categoria: "Ajustes tarjeta",
-    permitirMontoNegativo: true,
   });
   assert.equal(r.ok, true);
   assert.equal(r.valor.categoria, "Ajustes tarjeta");
+});
+
+test("validarTransaccion rechaza cero incluso en el ajuste", () => {
+  const r = validarTransaccion({ ...ajuste, monto: "0" });
+  assert.equal(r.ok, false);
+  assert.ok(r.errores.monto);
+});
+
+test("validarTransaccion acota la fecha a 2000-2100", () => {
+  for (const fecha of ["2000-01-01", "2100-12-31"]) {
+    assert.equal(validarTransaccion({ ...base, fecha }).ok, true, fecha);
+  }
+  for (const fecha of ["1999-12-31", "0202-05-01", "2101-01-01", "9999-12-31"]) {
+    assert.ok(validarTransaccion({ ...base, fecha }).errores.fecha, fecha);
+  }
+});
+
+test("aFilaTransaccion no arrastra campos extra que mande el cliente", () => {
+  const r = validarTransaccion({ ...base, permitirMontoNegativo: true, x: 1 });
+  const fila = aFilaTransaccion(r.valor, "u1", "pdf");
+  assert.deepEqual(Object.keys(fila).sort(), [
+    "categoria", "cuenta", "descripcion", "fecha", "monto", "origen", "tipo", "usuario_id",
+  ]);
 });
 
 test("validarTransaccion acepta una categoría personalizada", () => {

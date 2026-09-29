@@ -153,9 +153,10 @@ El flag viaja en el `FormData` del POST a `/api/importar`, elige la variante del
 prompt (`promptExtraccion(incluirImpuestos)`) y el reparto en el servidor
 (`clasificarItems(items, incluirImpuestos)`, que devuelve `ajuste: {neto, lineas}`).
 
-**Monto negativo:** `validarTransaccion` sólo lo acepta con el flag
-`permitirMontoNegativo`, que el frontend marca únicamente para la fila de
-ajuste. El alta manual sigue exigiendo montos positivos.
+**Monto negativo:** lo decide el servidor, nunca el cliente. `validarTransaccion`
+sólo lo acepta si la fila es un egreso de la categoría `Ajustes tarjeta`
+(`admiteMontoNegativo`); cualquier otra combinación, incluida el alta manual,
+exige montos positivos. La base aplica la misma regla con un `check`.
 
 **Gráficos:** `egresosPorCategoria` excluye la categoría `Ajustes tarjeta` (y
 cualquier egreso ≤ 0) para que la torta no muestre una porción negativa rara; su
@@ -270,18 +271,23 @@ El corazón de la app: un ingreso o egreso por fila.
 | Columna | Tipo | Para qué |
 | --- | --- | --- |
 | `id` | `uuid` | Clave primaria (autogenerada). |
-| `fecha` | `date` | Fecha imputada. En un alta manual es la que elegís; en un import es el **día 1 del mes en que pagás el resumen** (ver [Qué fecha se guarda](#qué-fecha-se-guarda)). |
-| `descripcion` | `text` | Texto libre: el comercio o el concepto. |
-| `monto` | `numeric(14,2)` | Importe. Normalmente positivo; el único negativo es el ítem de ajuste de impuestos. |
+| `fecha` | `date` | Entre 2000 y 2100 (`check`). Fecha imputada. En un alta manual es la que elegís; en un import es el **día 1 del mes en que pagás el resumen** (ver [Qué fecha se guarda](#qué-fecha-se-guarda)). |
+| `descripcion` | `text` | Texto libre: el comercio o el concepto. Hasta 200 caracteres (`check`). |
+| `monto` | `numeric(14,2)` | Importe, nunca 0. Positivo, salvo el ítem de ajuste de impuestos (egreso de "Ajustes tarjeta"), el único que puede ser negativo (`check`). |
 | `tipo` | `text` | `'ingreso'` o `'egreso'` (con `check`). |
-| `categoria` | `text` (nullable) | Nombre de la categoría **como texto**, no un id. Puede ser una del sistema, una personalizada, o `null`. |
-| `cuenta` | `text` (nullable) | De qué cuenta/tarjeta salió (texto libre con sugerencias). |
+| `categoria` | `text` (nullable) | Nombre de la categoría **como texto**, no un id. Puede ser una del sistema, una personalizada, o `null`. Hasta 40 caracteres (`check`). |
+| `cuenta` | `text` (nullable) | De qué cuenta/tarjeta salió (texto libre con sugerencias). Hasta 60 caracteres (`check`). |
 | `origen` | `text` | `'manual'` o `'pdf'` (con `check`), para saber cómo entró. |
 | `usuario_id` | `uuid` | Dueño de la fila. FK a `auth.users`, `on delete cascade`. Default `auth.uid()`. |
 | `created_at` | `timestamptz` | Cuándo se creó; desempata el orden dentro de un mismo día. |
 
 Índice `(usuario_id, fecha desc)` para el listado típico (mis transacciones, más
 recientes primero).
+
+Los `check` repiten en la base las reglas de `src/lib/validacion.ts`: el navegador
+tiene la anon key y la sesión, así que podría escribir directo en la tabla y
+saltearse la validación de la app. Si cambiás un límite, cambialo en los dos
+lados.
 
 ### `categorias`
 
@@ -325,6 +331,13 @@ personalizadas (si no la corrés, la app funciona igual pero sólo con las 8 del
 sistema). Y una tercera con
 [`supabase/importaciones.sql`](supabase/importaciones.sql), el límite diario de
 importaciones: **sin ella la importación de PDF queda deshabilitada**.
+
+Por último, los CHECK constraints de `transacciones`
+([`supabase/checks_transacciones.sql`](supabase/checks_transacciones.sql)). Si ya
+tenés datos cargados, corré antes
+[`supabase/diagnostico_checks.sql`](supabase/diagnostico_checks.sql): sólo lee, y
+lista las filas que violarían alguna regla. Si hay alguna, corregila primero; si
+no, la migración falla entera y no aplica nada.
 
 ### 3. Configurar las URLs de Auth
 
@@ -379,6 +392,8 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `supabase/schema.sql` | Tabla `transacciones` + políticas RLS |
 | `supabase/categorias.sql` | Tabla `categorias` (personalizadas) + políticas RLS |
 | `supabase/importaciones.sql` | Tabla `importaciones` + RLS + función del límite diario |
+| `supabase/checks_transacciones.sql` | CHECK constraints de `transacciones` |
+| `supabase/diagnostico_checks.sql` | Qué filas existentes violarían esos CHECKs (sólo lectura) |
 
 ## Cómo agregar una funcionalidad nueva
 

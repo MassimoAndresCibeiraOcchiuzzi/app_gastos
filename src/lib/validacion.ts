@@ -1,10 +1,18 @@
-import { MAX_CATEGORIA } from "./categorias";
+import { CATEGORIA_AJUSTES, MAX_CATEGORIA } from "./categorias";
 import { MONTO_MAXIMO, esFechaISO, parsearMonto } from "./formato";
 import type { CampoFormulario } from "./formulario";
 import type { Origen, Tipo } from "./types";
 
 export const MAX_DESCRIPCION = 200;
 export const MAX_CUENTA = 60;
+
+/**
+ * Rango de fechas aceptado. Coincide con el CHECK de `transacciones`
+ * (supabase/checks_transacciones.sql): un año mal tipeado ("0202") no entra.
+ * Las fechas ISO se comparan bien como texto.
+ */
+export const FECHA_MINIMA = "2000-01-01";
+export const FECHA_MAXIMA = "2100-12-31";
 
 /** Lo que llega del formulario o de la tabla de importación: todo texto. */
 export type EntradaTransaccion = {
@@ -14,14 +22,17 @@ export type EntradaTransaccion = {
   categoria: string;
   cuenta: string;
   fecha: string;
-  /**
-   * Deja pasar un monto negativo. Sólo lo usa el ajuste neteado de impuestos:
-   * un egreso negativo (más devoluciones que percepciones) resta de los
-   * egresos del mes. El alta manual nunca lo setea, así que sigue exigiendo
-   * montos positivos.
-   */
-  permitirMontoNegativo?: boolean;
 };
+
+/**
+ * ¿Puede esta transacción tener monto negativo? Sólo el ajuste neteado de
+ * impuestos: un egreso negativo (más devoluciones que percepciones) resta de
+ * los egresos del mes. Se decide acá, con la categoría y el tipo, y nunca con
+ * un flag que mande el cliente. Es la misma regla que el CHECK de la base.
+ */
+export function admiteMontoNegativo(categoria: string, tipo: string): boolean {
+  return categoria === CATEGORIA_AJUSTES && tipo === "egreso";
+}
 
 /** Lo que se puede insertar en `transacciones` (falta usuario_id y origen). */
 export type TransaccionValida = {
@@ -47,12 +58,16 @@ export function validarTransaccion(
 ): ResultadoValidacion {
   const errores: Partial<Record<CampoFormulario, string>> = {};
 
+  // Categoría y tipo primero: de ellos depende si el monto puede ser negativo.
+  const categoria = entrada.categoria.trim();
+  const tipo = entrada.tipo;
+
   const monto = parsearMonto(entrada.monto);
   if (monto === null) {
     errores.monto = "Poné un número.";
   } else if (monto === 0) {
     errores.monto = "No puede ser cero.";
-  } else if (monto < 0 && !entrada.permitirMontoNegativo) {
+  } else if (monto < 0 && !admiteMontoNegativo(categoria, tipo)) {
     errores.monto = "Tiene que ser mayor a cero.";
   } else if (Math.abs(monto) > MONTO_MAXIMO) {
     errores.monto = "Demasiado grande.";
@@ -65,7 +80,6 @@ export function validarTransaccion(
     errores.descripcion = `Máximo ${MAX_DESCRIPCION} caracteres.`;
   }
 
-  const tipo = entrada.tipo;
   if (tipo !== "ingreso" && tipo !== "egreso") {
     errores.tipo = "Elegí ingreso o egreso.";
   }
@@ -73,7 +87,6 @@ export function validarTransaccion(
   // La categoría es texto libre: puede ser del sistema o una personalizada del
   // usuario. Sólo validamos que no esté vacía y que no sea absurdamente larga;
   // qué categorías existen lo maneja el selector, no esta función pura.
-  const categoria = entrada.categoria.trim();
   if (categoria === "") {
     errores.categoria = "Elegí una categoría.";
   } else if (categoria.length > MAX_CATEGORIA) {
@@ -88,6 +101,8 @@ export function validarTransaccion(
   const fecha = entrada.fecha;
   if (!esFechaISO(fecha)) {
     errores.fecha = "Fecha inválida.";
+  } else if (fecha < FECHA_MINIMA || fecha > FECHA_MAXIMA) {
+    errores.fecha = "La fecha tiene que estar entre el año 2000 y el 2100.";
   }
 
   if (Object.keys(errores).length > 0) return { ok: false, errores };
