@@ -352,3 +352,150 @@ export function filasCategoriasMes(
 
   return { filas, total };
 }
+
+// --- Reparto de egresos por medio de pago (campo "Cuenta") -------------------
+
+/** Dónde caen los egresos sin cuenta (null o vacía). Va siempre al final. */
+export const SIN_CUENTA = "Sin cuenta";
+
+/**
+ * Cuántos segmentos con nombre entran en la barra. Con más cuentas, las más
+ * chicas se juntan en "Otras (N)" (igual que la torta con las categorías):
+ * más de 5-6 colores seguidos ya no se distinguen.
+ */
+const MAX_CUENTAS = 4;
+
+/**
+ * La clave con la que se agrupa una cuenta: sin mayúsculas, sin tildes y sin
+ * espacios de más. Así "Tarjeta", "tarjeta " y "  TARJETA" son la misma, y
+ * "Débito" y "Debito" también. "" si no hay cuenta.
+ */
+export function normalizarCuenta(cuenta: string | null): string {
+  return (cuenta ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+/**
+ * Colores fijos para las cuentas sugeridas en el formulario, en el orden
+ * validado de la paleta: el color sigue a la cuenta, no a su lugar en el
+ * ranking, así "Tarjeta" es del mismo color todos los meses.
+ */
+const COLOR_CUENTA: Record<string, string> = {
+  tarjeta: "var(--viz-1)",
+  efectivo: "var(--viz-2)",
+  debito: "var(--viz-3)",
+  transferencia: "var(--viz-4)",
+};
+/** Las cuentas escritas a mano reciben uno de los tonos que quedan, por hash. */
+const COLORES_LIBRES = ["var(--viz-5)", "var(--viz-6)", "var(--viz-7)", "var(--viz-8)"];
+
+function colorDeCuenta(clave: string): string {
+  if (COLOR_CUENTA[clave]) return COLOR_CUENTA[clave];
+  let h = 0;
+  for (let i = 0; i < clave.length; i++) h = (h * 31 + clave.charCodeAt(i)) | 0;
+  return COLORES_LIBRES[Math.abs(h) % COLORES_LIBRES.length];
+}
+
+export type SegmentoCuenta = {
+  /** Estable entre meses: la cuenta normalizada, u "__otras__" / "__sin__". */
+  clave: string;
+  etiqueta: string;
+  monto: number;
+  /** Porcentaje del total, con un decimal. */
+  porcentaje: number;
+  color: string;
+  tipo: "cuenta" | "otras" | "sin-cuenta";
+  /** Para "Otras (N)": las cuentas que junta. */
+  agrupa?: string[];
+};
+
+/**
+ * Cómo se reparten los egresos del mes entre las cuentas.
+ *
+ * Usa la misma base que la torta: egresos sin el ajuste de impuestos de la
+ * tarjeta (no tiene cuenta, puede ser negativo, y un segmento negativo no
+ * significa nada en una barra de proporciones). La etiqueta de cada cuenta es
+ * la forma en que más la escribiste ("Tarjeta" le gana a "tarjeta " si la
+ * usaste más veces así).
+ */
+export function repartoPorCuenta(
+  transacciones: Transaccion[],
+  mes: string,
+  maxCuentas = MAX_CUENTAS,
+): { segmentos: SegmentoCuenta[]; total: number } {
+  const grupos = new Map<string, { monto: number; variantes: Map<string, number> }>();
+  for (const t of transacciones) {
+    if (t.tipo !== "egreso" || mesDe(t) !== mes) continue;
+    if (t.categoria === CATEGORIA_AJUSTES) continue;
+    const clave = normalizarCuenta(t.cuenta);
+    const g = grupos.get(clave) ?? { monto: 0, variantes: new Map() };
+    g.monto += t.monto;
+    if (clave !== "") {
+      const variante = (t.cuenta ?? "").trim().replace(/\s+/g, " ");
+      g.variantes.set(variante, (g.variantes.get(variante) ?? 0) + 1);
+    }
+    grupos.set(clave, g);
+  }
+
+  const etiquetaDe = (variantes: Map<string, number>) =>
+    [...variantes.entries()].sort(
+      ([a, na], [b, nb]) =>
+        nb - na ||
+        // A igual uso, la que arranca con mayúscula ("Tarjeta" antes que "tarjeta").
+        Number(/^\p{Lu}/u.test(b)) - Number(/^\p{Lu}/u.test(a)) ||
+        a.localeCompare(b, "es"),
+    )[0][0];
+
+  const cuentas = [...grupos.entries()]
+    .filter(([clave, g]) => clave !== "" && redondearCentavos(g.monto) > 0)
+    .map(([clave, g]) => ({
+      clave,
+      etiqueta: etiquetaDe(g.variantes),
+      monto: redondearCentavos(g.monto),
+    }))
+    .sort((a, b) => b.monto - a.monto || a.etiqueta.localeCompare(b.etiqueta, "es"));
+  const sinCuenta = redondearCentavos(grupos.get("")?.monto ?? 0);
+
+  const total = redondearCentavos(
+    cuentas.reduce((acc, c) => acc + c.monto, 0) + Math.max(sinCuenta, 0),
+  );
+  const pct = (monto: number) => (total > 0 ? Math.round((monto / total) * 1000) / 10 : 0);
+
+  const visibles = cuentas.length > maxCuentas ? cuentas.slice(0, maxCuentas - 1) : cuentas;
+  const cola = cuentas.slice(visibles.length);
+
+  const segmentos: SegmentoCuenta[] = visibles.map((c) => ({
+    ...c,
+    porcentaje: pct(c.monto),
+    color: colorDeCuenta(c.clave),
+    tipo: "cuenta",
+  }));
+  if (cola.length > 0) {
+    const monto = redondearCentavos(cola.reduce((acc, c) => acc + c.monto, 0));
+    segmentos.push({
+      clave: "__otras__",
+      etiqueta: `Otras (${cola.length})`,
+      monto,
+      porcentaje: pct(monto),
+      color: COLOR_SIN_CATEGORIA,
+      tipo: "otras",
+      agrupa: cola.map((c) => c.etiqueta),
+    });
+  }
+  if (sinCuenta > 0) {
+    segmentos.push({
+      clave: "__sin__",
+      etiqueta: SIN_CUENTA,
+      monto: sinCuenta,
+      porcentaje: pct(sinCuenta),
+      color: COLOR_SIN_CATEGORIA,
+      tipo: "sin-cuenta",
+    });
+  }
+
+  return { segmentos, total };
+}

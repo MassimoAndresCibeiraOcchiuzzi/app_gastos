@@ -7,8 +7,9 @@ import SelectorMes from "@/components/selector-mes";
 import CategoriasMes from "@/components/categorias-mes";
 import NumeroPrincipal from "@/components/numero-principal";
 import BarrasMeses from "@/components/graficos/barras-meses";
+import RepartoCuentas from "@/components/graficos/reparto-cuentas";
 import { totalesPorMes } from "@/lib/agregados";
-import { filasCategoriasMes, resumenMes } from "@/lib/dashboard";
+import { filasCategoriasMes, repartoPorCuenta, resumenMes } from "@/lib/dashboard";
 import {
   esMesValido,
   etiquetaMesCorta,
@@ -61,6 +62,7 @@ export default async function Dashboard({
 
   const esMesEnCurso = mes === mesDeHoy;
   const resumen = resumenMes(transacciones, mes, esMesEnCurso);
+  const { segmentos: porCuenta } = repartoPorCuenta(transacciones, mes);
 
   const barras = totalesPorMes(transacciones, meses).map((m) => ({
     ...m,
@@ -90,6 +92,10 @@ export default async function Dashboard({
               total={totalEgresos}
               esMesEnCurso={esMesEnCurso}
             />
+          </Tarjeta>
+
+          <Tarjeta titulo="Egresos por medio de pago">
+            <RepartoCuentas segmentos={porCuenta} />
           </Tarjeta>
 
           <Tarjeta

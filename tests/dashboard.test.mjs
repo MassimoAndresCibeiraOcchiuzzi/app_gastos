@@ -7,6 +7,8 @@ import {
   esDevolucionDeCategoria,
   filasCategoriasMes,
   resumenMes,
+  normalizarCuenta,
+  repartoPorCuenta,
 } from "../src/lib/dashboard.ts";
 import { ultimosMeses } from "../src/lib/formato.ts";
 
@@ -315,4 +317,106 @@ test("resumenMes: un mes sin egresos no se compara (sería ▼100%)", () => {
   const r = resumenMes(datos, MES, false);
   assert.equal(r.egresos, 0);
   assert.equal(r.comparacion, null);
+});
+
+// --- reparto por medio de pago ---------------------------------------------------
+
+const conCuenta = (cuenta, monto, extra = {}) =>
+  t("2026-07-05", "Comida", monto, { cuenta, ...extra });
+
+test("normalizarCuenta ignora mayúsculas, espacios de más y tildes", () => {
+  for (const v of ["Tarjeta", "tarjeta ", "  TARJETA", "TarJeta"]) {
+    assert.equal(normalizarCuenta(v), "tarjeta", JSON.stringify(v));
+  }
+  assert.equal(normalizarCuenta("Débito"), normalizarCuenta("debito"));
+  assert.equal(normalizarCuenta("Visa   Gold "), "visa gold");
+  assert.equal(normalizarCuenta(null), "");
+  assert.equal(normalizarCuenta("   "), "");
+});
+
+test("reparto: agrupa las variantes y usa la forma más escrita como etiqueta", () => {
+  const { segmentos, total } = repartoPorCuenta(
+    [
+      conCuenta("Tarjeta", 300),
+      conCuenta("tarjeta ", 100),
+      conCuenta("Tarjeta", 100),
+      conCuenta("Efectivo", 200),
+    ],
+    MES,
+  );
+  assert.deepEqual(
+    segmentos.map((x) => [x.etiqueta, x.monto, x.porcentaje, x.tipo]),
+    [
+      ["Tarjeta", 500, 71.4, "cuenta"],
+      ["Efectivo", 200, 28.6, "cuenta"],
+    ],
+  );
+  assert.equal(total, 700);
+});
+
+test("reparto: a igual uso, la etiqueta que arranca con mayúscula", () => {
+  const { segmentos } = repartoPorCuenta(
+    [conCuenta("débito", 100), conCuenta("Débito", 100)],
+    MES,
+  );
+  assert.equal(segmentos[0].etiqueta, "Débito");
+});
+
+test("reparto: 'Sin cuenta' (null o vacía) va al final aunque sea la más grande", () => {
+  const { segmentos } = repartoPorCuenta(
+    [conCuenta(null, 900), conCuenta("  ", 100), conCuenta("Tarjeta", 50)],
+    MES,
+  );
+  assert.deepEqual(
+    segmentos.map((x) => [x.etiqueta, x.monto, x.tipo]),
+    [
+      ["Tarjeta", 50, "cuenta"],
+      ["Sin cuenta", 1000, "sin-cuenta"],
+    ],
+  );
+});
+
+test("reparto: con más de 4 cuentas, junta la cola en 'Otras (N)'", () => {
+  const nombres = ["Tarjeta", "Efectivo", "Débito", "Transferencia", "Mercado Pago", "Visa"];
+  const { segmentos } = repartoPorCuenta(
+    nombres.map((c, i) => conCuenta(c, 600 - i * 100)).concat(conCuenta(null, 10)),
+    MES,
+  );
+  assert.deepEqual(segmentos.map((x) => x.etiqueta), [
+    "Tarjeta",
+    "Efectivo",
+    "Débito",
+    "Otras (3)",
+    "Sin cuenta",
+  ]);
+  const otras = segmentos[3];
+  assert.equal(otras.monto, 300 + 200 + 100);
+  assert.deepEqual(otras.agrupa, ["Transferencia", "Mercado Pago", "Visa"]);
+});
+
+test("reparto: sólo egresos del mes, sin el ajuste de impuestos", () => {
+  const { segmentos, total } = repartoPorCuenta(
+    [
+      conCuenta("Tarjeta", 1000),
+      conCuenta(null, -300, { categoria: "Ajustes tarjeta" }), // ajuste: no entra
+      conCuenta("Tarjeta", 5000, { tipo: "ingreso" }), // ingreso: no entra
+      t("2026-06-05", "Comida", 999, { cuenta: "Efectivo" }), // otro mes
+    ],
+    MES,
+  );
+  assert.deepEqual(segmentos.map((x) => [x.etiqueta, x.monto]), [["Tarjeta", 1000]]);
+  assert.equal(total, 1000);
+});
+
+test("reparto: el color sigue a la cuenta, no a su lugar en el ranking", () => {
+  const a = repartoPorCuenta([conCuenta("Tarjeta", 10), conCuenta("Efectivo", 900)], MES);
+  const b = repartoPorCuenta([conCuenta("tarjeta", 900), conCuenta("Efectivo", 10)], MES);
+  const color = (r, e) => r.segmentos.find((x) => x.etiqueta.toLowerCase() === e).color;
+  assert.equal(color(a, "tarjeta"), color(b, "tarjeta"));
+  assert.equal(color(a, "efectivo"), color(b, "efectivo"));
+  assert.notEqual(color(a, "tarjeta"), color(a, "efectivo"));
+});
+
+test("reparto: un mes sin egresos no tiene segmentos", () => {
+  assert.deepEqual(repartoPorCuenta([], MES), { segmentos: [], total: 0 });
 });
