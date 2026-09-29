@@ -8,13 +8,15 @@ import {
   motivoDeImpuesto,
   esDevolucion,
   clasificarItems,
-  promptExtraccion,
   DESCRIPCION_AJUSTES,
   EXCLUSIONES,
   IMPUESTOS,
+} from "../src/lib/extraccion.ts";
+import {
+  promptExtraccion,
   ESQUEMA_EXTRACCION,
   PROMPT_EXTRACCION,
-} from "../src/lib/extraccion.ts";
+} from "../src/lib/extraccion-prompt.ts";
 
 const json = (obj) => JSON.stringify(obj);
 
