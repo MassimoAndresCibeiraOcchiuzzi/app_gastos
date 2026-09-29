@@ -5,6 +5,10 @@ import {
   COLOR_SIN_CATEGORIA,
   colorDeCategoria,
   normalizarNombreCategoria,
+  CATEGORIAS_SUGERIBLES,
+  CUENTA_IMPORTACION,
+  categoriasParaSugerir,
+  resolverCategoria,
 } from "../src/lib/categorias.ts";
 
 test("colorDeCategoria respeta el tono fijo de las del sistema", () => {
@@ -32,4 +36,32 @@ test("normalizarNombreCategoria ignora mayúsculas y bordes", () => {
     normalizarNombreCategoria("COMIDA"),
     normalizarNombreCategoria("comida"),
   );
+});
+
+test("CATEGORIAS_SUGERIBLES: los rubros del sistema, sin Tarjeta ni el ajuste", () => {
+  assert.deepEqual([...CATEGORIAS_SUGERIBLES], [
+    "Comida", "Transporte", "Suscripciones", "Alquiler",
+    "Servicios", "Entretenimiento", "Salud", "Otros",
+  ]);
+});
+
+test("categoriasParaSugerir suma las propias sin repetir ni colar Tarjeta", () => {
+  assert.deepEqual(
+    categoriasParaSugerir([" Viajes ", "viajes", "COMIDA", "tarjeta", "Ajustes Tarjeta", "", "Mascotas"]),
+    [...CATEGORIAS_SUGERIBLES, "Viajes", "Mascotas"],
+  );
+  assert.deepEqual(categoriasParaSugerir([]), [...CATEGORIAS_SUGERIBLES]);
+});
+
+test("resolverCategoria: nombre canónico, u Otros si no está", () => {
+  const validas = categoriasParaSugerir(["Viajes"]);
+  assert.equal(resolverCategoria("salud", validas), "Salud");
+  assert.equal(resolverCategoria("VIAJES", validas), "Viajes");
+  assert.equal(resolverCategoria("Inventada", validas), "Otros");
+  assert.equal(resolverCategoria(undefined, validas), "Otros");
+  assert.equal(resolverCategoria("Tarjeta", [...validas, "Tarjeta"]), "Otros");
+});
+
+test("la cuenta de una importación arranca en Tarjeta", () => {
+  assert.equal(CUENTA_IMPORTACION, "Tarjeta");
 });

@@ -1,4 +1,8 @@
-import { CATEGORIA_TARJETA } from "./categorias";
+import {
+  CATEGORIA_POR_DEFECTO,
+  CATEGORIAS_SUGERIBLES,
+  resolverCategoria,
+} from "./categorias";
 import { redondearCentavos } from "./formato";
 
 /** Lo que le pedimos a Claude por cada consumo del resumen. */
@@ -12,6 +16,11 @@ export type ItemExtraido = {
   descripcion: string;
   /** Importe del consumo, siempre positivo. */
   monto: number;
+  /**
+   * El rubro que sugirió la IA ("Comida", "Transporte", una propia…), ya
+   * validado contra las categorías del usuario: si no existía, "Otros".
+   */
+  categoria: string;
 };
 
 /**
@@ -244,8 +253,11 @@ export function clasificarItems(
  * negativo suelto no alcanza para fabricar un ingreso. El tipo sigue siendo
  * editable en la tabla.
  *
- * La categoría es fija: **"Tarjeta"** para todo lo importado de un resumen. El
- * usuario puede cambiarla fila por fila en la tabla de revisión.
+ * La categoría es el rubro que sugirió la IA, ya validado por
+ * `parsearRespuesta` (también para devoluciones: una devolución de un
+ * supermercado va en Comida, como ingreso). El usuario la puede cambiar fila
+ * por fila en la tabla de revisión. Que salió de la tarjeta queda en la
+ * cuenta, no en la categoría.
  */
 export function aCamposGuardables(item: ItemExtraido): {
   descripcion: string;
@@ -257,7 +269,7 @@ export function aCamposGuardables(item: ItemExtraido): {
     descripcion: item.descripcion,
     monto: Math.abs(item.monto).toFixed(2),
     tipo: esDevolucion(item.descripcion) ? "ingreso" : "egreso",
-    categoria: CATEGORIA_TARJETA,
+    categoria: item.categoria.trim() || CATEGORIA_POR_DEFECTO,
   };
 }
 
@@ -291,8 +303,16 @@ function montoOpcional(valor: unknown): number | null {
  * La salida estructurada ya garantiza la forma, pero esto cubre el caso de que
  * el modelo se corte a mitad de camino o devuelva algo raro: preferimos un
  * mensaje claro antes que una pantalla rota.
+ *
+ * `categoriasValidas` son las del usuario (sistema + propias, ver
+ * `categoriasParaSugerir`). La categoría sugerida se valida contra esa lista
+ * aunque el esquema ya la restrinja: una que no exista, falte o venga rota
+ * queda en "Otros", nunca se inventa una.
  */
-export function parsearRespuesta(texto: string): ResultadoExtraccion {
+export function parsearRespuesta(
+  texto: string,
+  categoriasValidas: readonly string[] = CATEGORIAS_SUGERIBLES,
+): ResultadoExtraccion {
   let datos: unknown;
   try {
     datos = JSON.parse(texto);
@@ -323,13 +343,21 @@ export function parsearRespuesta(texto: string): ResultadoExtraccion {
   const validos: ItemExtraido[] = [];
   for (const item of items) {
     if (typeof item !== "object" || item === null) continue;
-    const { fecha, descripcion, monto } = item as Record<string, unknown>;
+    const { fecha, descripcion, monto, categoria_sugerida } = item as Record<
+      string,
+      unknown
+    >;
 
     if (typeof fecha !== "string") continue;
     if (typeof descripcion !== "string") continue;
     if (typeof monto !== "number" || !Number.isFinite(monto)) continue;
 
-    validos.push({ fecha, descripcion: descripcion.trim(), monto });
+    validos.push({
+      fecha,
+      descripcion: descripcion.trim(),
+      monto,
+      categoria: resolverCategoria(categoria_sugerida, categoriasValidas),
+    });
   }
 
   return { ok: true, items: validos, totalResumen };

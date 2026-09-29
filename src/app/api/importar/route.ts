@@ -3,10 +3,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { clasificarItems, parsearRespuesta, type Metodo } from "@/lib/extraccion";
 import {
-  ESQUEMA_EXTRACCION,
+  esquemaExtraccion,
   mensajeConTexto,
   promptExtraccion,
 } from "@/lib/extraccion-prompt";
+import { categoriasParaSugerir } from "@/lib/categorias";
+import { traerCategoriasUsuario } from "@/lib/consultas";
 import {
   LARGO_FIRMA_PDF,
   LIMITE_IMPORTACIONES,
@@ -181,11 +183,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Las categorías entre las que la IA elige el rubro de cada consumo: las
+    // del sistema y las propias del usuario. La misma lista va al prompt, al
+    // `enum` del esquema y a la validación de la respuesta. Si no se pueden
+    // leer las propias, se sigue con las del sistema.
+    const propias = await traerCategoriasUsuario();
+    const categorias = categoriasParaSugerir(propias.map((c) => c.nombre));
+
     const contenido: Anthropic.ContentBlockParam[] = extraido
       ? [
           {
             type: "text",
-            text: mensajeConTexto(extraido.texto, incluirImpuestos),
+            text: mensajeConTexto(extraido.texto, incluirImpuestos, categorias),
           },
         ]
       : [
@@ -197,7 +206,7 @@ export async function POST(request: NextRequest) {
               data: Buffer.from(bytes).toString("base64"),
             },
           },
-          { type: "text", text: promptExtraccion(incluirImpuestos) },
+          { type: "text", text: promptExtraccion(incluirImpuestos, categorias) },
         ];
 
     // 7. Claude.
@@ -213,7 +222,7 @@ export async function POST(request: NextRequest) {
         thinking: { type: "adaptive" },
         output_config: {
           effort: ESFUERZO,
-          format: { type: "json_schema", schema: ESQUEMA_EXTRACCION },
+          format: { type: "json_schema", schema: esquemaExtraccion(categorias) },
         },
         messages: [{ role: "user", content: contenido }],
       });
@@ -239,7 +248,7 @@ export async function POST(request: NextRequest) {
     const texto = respuesta.content.find((b) => b.type === "text")?.text;
     if (!texto) return error("La IA no devolvió nada que podamos leer.", 422);
 
-    const resultado = parsearRespuesta(texto);
+    const resultado = parsearRespuesta(texto, categorias);
     if (!resultado.ok) {
       console.error("[importar] no se pudo parsear la respuesta de la IA");
       return error(resultado.error, 422);

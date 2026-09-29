@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { importarTransacciones } from "@/app/actions/transacciones";
-import { CATEGORIA_AJUSTES } from "@/lib/categorias";
+import { CATEGORIA_AJUSTES, CUENTA_IMPORTACION } from "@/lib/categorias";
 import SelectorCategoria from "@/components/selector-categoria";
 import { useCategorias } from "@/components/use-categorias";
 import { CAMPO_COMPACTO, CAMPO_SELECT_COMPACTO } from "@/lib/ui";
@@ -71,8 +71,9 @@ type Estado =
  * una cuota 3 de 6 se compró hace meses pero la plata sale ahora. La fecha
  * original queda a la vista como referencia.
  *
- * El resto de la traducción (monto positivo, siempre egreso, categoría
- * conocida) vive en `aCamposGuardables`, que es donde se testea.
+ * El resto de la traducción (monto positivo, egreso salvo devoluciones, la
+ * categoría por rubro que sugirió la IA) vive en `aCamposGuardables`, que es
+ * donde se testea.
  */
 function aFila(item: ItemExtraido, id: number, fechaImputacion: string): Fila {
   return {
@@ -137,7 +138,9 @@ export default function ImportarPdf({
   const [metodo, setMetodo] = useState<Metodo>("texto");
   const [totalResumen, setTotalResumen] = useState<TotalResumen>(TOTAL_VACIO);
   const [mesResumen, setMesResumen] = useState(mesPorDefecto);
-  const [cuenta, setCuenta] = useState("");
+  // Arranca en "Tarjeta": es el medio de pago del resumen. El rubro va en la
+  // categoría de cada fila. Se puede cambiar (p. ej. "Visa", "Mastercard").
+  const [cuenta, setCuenta] = useState(CUENTA_IMPORTACION);
   // Default destildado: no importar impuestos, que es el comportamiento base.
   const [incluirImpuestos, setIncluirImpuestos] = useState(false);
   const [importadas, setImportadas] = useState(0);
@@ -344,7 +347,7 @@ export default function ImportarPdf({
     setHash(null);
     setAvisoDuplicado(null);
     setTotalResumen(TOTAL_VACIO);
-    setCuenta("");
+    setCuenta(CUENTA_IMPORTACION);
     setError(null);
     setEstado("vacio");
   }
