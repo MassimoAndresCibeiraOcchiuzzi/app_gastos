@@ -4,16 +4,10 @@ import { traerTransacciones } from "@/lib/consultas";
 import Encabezado from "@/components/encabezado";
 import Navegacion from "@/components/navegacion";
 import SelectorMes from "@/components/selector-mes";
-import TopCategorias from "@/components/top-categorias";
+import CategoriasMes from "@/components/categorias-mes";
 import BarrasMeses from "@/components/graficos/barras-meses";
-import TortaEgresos from "@/components/graficos/torta-egresos";
-import {
-  agruparCola,
-  egresosPorCategoria,
-  totalEgresosPorCategoria,
-  totalesPorMes,
-} from "@/lib/agregados";
-import { COLOR_SIN_CATEGORIA, colorDeCategoria } from "@/lib/categorias";
+import { totalesPorMes } from "@/lib/agregados";
+import { filasCategoriasMes } from "@/lib/dashboard";
 import {
   esMesValido,
   etiquetaMesCorta,
@@ -44,27 +38,24 @@ export default async function Dashboard({
   const mesDeHoy = mesActual();
   const mes = esMesValido(mesPedido) ? mesPedido : mesDeHoy;
 
-  // Una sola consulta cubre las dos vistas: la torta usa el mes elegido y las
-  // barras los 6 meses que terminan en él.
+  // Una sola consulta cubre todo: la torta y la lista usan el mes elegido, y
+  // las barras, las comparaciones y el mini gráfico de cada categoría, los 6
+  // meses que terminan en él.
   const meses = ultimosMeses(mes, MESES_COMPARADOS);
   const { transacciones, error } = await traerTransacciones({
     desde: `${meses[0]}-01`,
     hasta: rangoMes(mes).hasta,
   });
 
-  const delMes = transacciones.filter((t) => t.fecha.slice(0, 7) === mes);
-  const porCategoria = egresosPorCategoria(delMes);
-  // El total de la torta es la suma de sus porciones (consumos), no el egreso
-  // total del mes: ese incluye el ajuste de impuestos, que puede ser negativo y
-  // no se dibuja. Así los porcentajes suman 100%.
-  const totalEgresos = totalEgresosPorCategoria(delMes);
-
-  const porciones = agruparCola(porCategoria, MAX_PORCIONES).visibles.map(
-    (c) => ({
-      categoria: c.categoria,
-      monto: c.monto,
-      color: c.esResto ? COLOR_SIN_CATEGORIA : colorDeCategoria(c.categoria),
-    }),
+  // Filas de la lista (= porciones de la torta), con su comparación y su
+  // detalle ya armados. El total es la suma de las porciones (consumos), no el
+  // egreso total del mes: ese incluye el ajuste de impuestos, que puede ser
+  // negativo y no se dibuja. Así los porcentajes suman 100%.
+  const { filas, total: totalEgresos } = filasCategoriasMes(
+    transacciones,
+    mes,
+    meses,
+    MAX_PORCIONES,
   );
 
   const barras = totalesPorMes(transacciones, meses).map((m) => ({
@@ -86,20 +77,17 @@ export default async function Dashboard({
           No pudimos traer los datos: {error}
         </p>
       ) : (
-        // items-start: si no, la tarjeta corta del top 3 se estira hasta la
-        // altura de la torta y queda medio vacía.
-        <div className="grid items-start gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4">
           <Tarjeta titulo="Egresos por categoría">
-            <TortaEgresos porciones={porciones} total={totalEgresos} />
-          </Tarjeta>
-
-          <Tarjeta titulo="Dónde más gastaste">
-            <TopCategorias totales={porCategoria} cantidad={3} />
+            <CategoriasMes
+              filas={filas}
+              total={totalEgresos}
+              esMesEnCurso={mes === mesDeHoy}
+            />
           </Tarjeta>
 
           <Tarjeta
             titulo={`Ingresos vs egresos · últimos ${MESES_COMPARADOS} meses`}
-            className="lg:col-span-2"
           >
             <BarrasMeses datos={barras} />
           </Tarjeta>
