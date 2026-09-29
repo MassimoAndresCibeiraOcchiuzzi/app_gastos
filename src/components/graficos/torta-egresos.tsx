@@ -31,8 +31,12 @@ export default function TortaEgresos({
 }: {
   porciones: PorcionCategoria[];
   total: number;
-  /** Índice de la porción resaltada (hover o fila abierta), o null. */
+  /**
+   * Índice de la porción resaltada, o null. Lo decide el padre: la categoría
+   * abierta, y encima el hover sólo si viene de un mouse.
+   */
   activo: number | null;
+  /** Aviso de hover sobre una porción; el padre decide si lo usa. */
   onResaltar: (indice: number | null) => void;
   onElegir: (indice: number) => void;
 }) {
