@@ -167,3 +167,12 @@ test("aFilaTransaccion agrega el usuario y el origen", () => {
     origen: "pdf",
   });
 });
+
+test("el monto precargado al editar se vuelve a leer igual", async () => {
+  const { parsearMonto } = await import("../src/lib/formato.ts");
+  // Mismo formato que `valoresDe` en formulario-transaccion.tsx.
+  for (const monto of [1234.5, 12500, 0.01, -3210.99, 1234567.89]) {
+    const texto = monto.toFixed(2).replace(".", ",");
+    assert.equal(parsearMonto(texto), monto, texto);
+  }
+});
