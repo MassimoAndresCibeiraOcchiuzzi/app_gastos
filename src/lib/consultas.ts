@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import type { Presupuesto } from "@/lib/presupuestos";
 import type { ReglaCategoria } from "@/lib/reglas";
 import type { CategoriaUsuario, Transaccion } from "@/lib/types";
 
@@ -103,4 +104,32 @@ export async function traerReglas(): Promise<ReglaCategoria[]> {
     return [];
   }
   return (data ?? []) as ReglaCategoria[];
+}
+
+/**
+ * Trae los presupuestos mensuales del usuario. Si la tabla no existe todavía
+ * (no corrieron supabase/presupuestos.sql) o la consulta falla, `error` lo
+ * dice y la lista viene vacía: el Dashboard sigue andando sin la sección.
+ */
+export async function traerPresupuestos(): Promise<{
+  presupuestos: Presupuesto[];
+  error: string | null;
+}> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("presupuestos")
+    .select("categoria, monto_mensual");
+
+  if (error) {
+    console.error("[presupuestos] no se pudieron leer:", error.message);
+    return { presupuestos: [], error: error.message };
+  }
+  // `numeric` puede llegar como string según el driver.
+  return {
+    presupuestos: (data ?? []).map((p) => ({
+      categoria: p.categoria as string,
+      monto_mensual: Number(p.monto_mensual),
+    })),
+    error: null,
+  };
 }
