@@ -2,8 +2,13 @@ import {
   SIN_CATEGORIA,
   agruparCola,
   egresosPorCategoria,
+  totalPorTipo,
 } from "./agregados";
-import { COLOR_SIN_CATEGORIA, colorDeCategoria } from "./categorias";
+import {
+  CATEGORIA_AJUSTES,
+  COLOR_SIN_CATEGORIA,
+  colorDeCategoria,
+} from "./categorias";
 import { esDevolucion } from "./extraccion";
 import { etiquetaMesCorta, redondearCentavos, sumarMeses } from "./formato";
 import type { Transaccion } from "./types";
@@ -129,18 +134,32 @@ export function compararConHistoria(
   mes: string,
   mesesAtras = 5,
 ): Comparacion {
-  const actual = egresoCategoriaMes(transacciones, categoria, mes);
-  const conHistoria = new Set(transacciones.map(mesDe));
+  return compararMontos(
+    (m) => egresoCategoriaMes(transacciones, categoria, m),
+    mes,
+    new Set(transacciones.map(mesDe)),
+    mesesAtras,
+  );
+}
 
+/**
+ * La regla de comparación, sin atarse a qué se compara: `montoDe(mes)` da el
+ * monto de un mes (los egresos de una categoría, o los del mes entero) y
+ * `conHistoria` los meses en que la app tuvo alguna transacción.
+ */
+function compararMontos(
+  montoDe: (mes: string) => number,
+  mes: string,
+  conHistoria: Set<string>,
+  mesesAtras: number,
+): Comparacion {
+  const actual = montoDe(mes);
   const previos = Array.from({ length: MESES_PROMEDIO }, (_, i) =>
     sumarMeses(mes, -(i + 1)),
   );
   if (previos.every((m) => conHistoria.has(m))) {
     const promedio =
-      previos.reduce(
-        (acc, m) => acc + egresoCategoriaMes(transacciones, categoria, m),
-        0,
-      ) / MESES_PROMEDIO;
+      previos.reduce((acc, m) => acc + montoDe(m), 0) / MESES_PROMEDIO;
     return promedio > 0
       ? { tipo: "promedio", porcentaje: variacion(actual, promedio) }
       : { tipo: "nuevo" };
@@ -148,12 +167,81 @@ export function compararConHistoria(
 
   for (let i = 1; i <= mesesAtras; i++) {
     const m = sumarMeses(mes, -i);
-    const monto = egresoCategoriaMes(transacciones, categoria, m);
+    const monto = montoDe(m);
     if (monto > 0) {
       return { tipo: "mes", porcentaje: variacion(actual, monto), mes: m };
     }
   }
   return { tipo: "nuevo" };
+}
+
+/** Todos los egresos de un mes, con el ajuste de impuestos (igual que Movimientos). */
+function egresosMes(transacciones: Transaccion[], mes: string): number {
+  return totalPorTipo(
+    transacciones.filter((t) => mesDe(t) === mes),
+    "egreso",
+  );
+}
+
+/** El número principal del Dashboard y lo que lo acompaña. */
+export type ResumenMes = {
+  /** Todos los egresos del mes: el mismo número que "Egresos" en Movimientos. */
+  egresos: number;
+  ingresos: number;
+  /** ingresos − egresos, como en Movimientos. */
+  balance: number;
+  /**
+   * El ajuste neteado de impuestos del mes ("Ajustes tarjeta"). Está en
+   * `egresos` pero no en la torta: si no es 0, los dos totales difieren y la
+   * pantalla lo aclara.
+   */
+  ajuste: number;
+  /**
+   * Contra el promedio de los 3 meses anteriores (o el mes anterior con
+   * egresos, si hay menos historia). null cuando no se muestra: mes en curso,
+   * mes sin egresos, o nada con qué comparar.
+   */
+  comparacion: Exclude<Comparacion, { tipo: "nuevo" }> | null;
+};
+
+/**
+ * Arma el número principal del mes. En el mes en curso no hay comparación: un
+ * mes a medio terminar siempre parece más barato que el promedio, y el
+ * resumen de la tarjeta entra de golpe cuando se importa.
+ */
+export function resumenMes(
+  transacciones: Transaccion[],
+  mes: string,
+  esMesEnCurso: boolean,
+  mesesAtras = 5,
+): ResumenMes {
+  const delMes = transacciones.filter((t) => mesDe(t) === mes);
+  const egresos = totalPorTipo(delMes, "egreso");
+  const ingresos = totalPorTipo(delMes, "ingreso");
+  const ajuste = redondearCentavos(
+    delMes
+      .filter((t) => t.tipo === "egreso" && t.categoria === CATEGORIA_AJUSTES)
+      .reduce((acc, t) => acc + t.monto, 0),
+  );
+
+  let comparacion: ResumenMes["comparacion"] = null;
+  if (!esMesEnCurso && egresos > 0) {
+    const c = compararMontos(
+      (m) => egresosMes(transacciones, m),
+      mes,
+      new Set(transacciones.map(mesDe)),
+      mesesAtras,
+    );
+    comparacion = c.tipo === "nuevo" ? null : c;
+  }
+
+  return {
+    egresos,
+    ingresos,
+    balance: redondearCentavos(ingresos - egresos),
+    ajuste,
+    comparacion,
+  };
 }
 
 /**

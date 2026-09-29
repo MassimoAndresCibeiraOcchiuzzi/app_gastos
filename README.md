@@ -50,6 +50,12 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
 - [x] "Otras (N)" despliega las categorías que agrupa
 - [x] La categoría abierta va en la URL (`?cat=`): "atrás" cierra el detalle
 
+**Dashboard, paso B**
+
+- [x] Número principal: "Gastaste $X en [mes]", con la comparación contra el
+  promedio de los 3 meses anteriores y el balance del mes
+- [x] En el mes en curso: "(mes en curso)" y sin comparación
+
 **Fase 4**
 
 - [x] Botón "Exportar historial" en Movimientos
@@ -286,6 +292,14 @@ Librería: **recharts** — declarativa, se lleva bien con React 19, tiene
 `ResponsiveContainer` (que es la mitad del trabajo de hacerlo responsive) y no
 arrastra D3 entero. Cuesta ~390 KB del bundle, pero sólo lo carga `/dashboard`.
 
+**Número principal.** "Gastaste $X" usa todos los egresos del mes, incluido el
+ajuste de impuestos de la tarjeta: es el mismo número que "Egresos" en
+Movimientos, y el balance también coincide. La torta no incluye el ajuste, así
+que cuando lo hay los dos totales difieren; una línea chica lo aclara y el
+centro de la torta dice "En categorías". La comparación usa la misma regla que
+las categorías (promedio de 3 meses, o el mes anterior con egresos, o nada) y
+no se muestra en el mes en curso ni en un mes sin egresos.
+
 **Detalle de una categoría.** Todo sale de las transacciones que la página ya
 trae (6 meses): `filasCategoriasMes` arma en el servidor cada fila con su
 comparación, su serie de 6 meses y sus transacciones, y el cliente sólo abre y
@@ -420,7 +434,9 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/app/page.tsx` | Movimientos: resumen + alta + lista del mes |
 | `src/app/dashboard/page.tsx` | Dashboard: torta con lista de categorías y barras de 6 meses |
 | `src/components/categorias-mes.tsx` | Lista interactiva de categorías y su detalle desplegable |
-| `src/lib/dashboard.ts` | Filas, comparación contra el promedio y detalle de cada categoría |
+| `src/components/numero-principal.tsx` | "Gastaste $X en [mes]", comparación y balance |
+| `src/components/indicador-comparacion.tsx` | El ▲/▼ % contra el promedio, compartido |
+| `src/lib/dashboard.ts` | Filas, comparación contra el promedio, detalle de cada categoría y número principal |
 | `src/app/actions/transacciones.ts` | Server actions de alta y borrado |
 | `src/app/actions/categorias.ts` | Server actions de crear y borrar categorías |
 | `src/components/selector-categoria.tsx` | Selector de categoría con alta inline |

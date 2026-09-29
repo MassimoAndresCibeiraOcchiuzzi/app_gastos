@@ -5,9 +5,10 @@ import Encabezado from "@/components/encabezado";
 import Navegacion from "@/components/navegacion";
 import SelectorMes from "@/components/selector-mes";
 import CategoriasMes from "@/components/categorias-mes";
+import NumeroPrincipal from "@/components/numero-principal";
 import BarrasMeses from "@/components/graficos/barras-meses";
 import { totalesPorMes } from "@/lib/agregados";
-import { filasCategoriasMes } from "@/lib/dashboard";
+import { filasCategoriasMes, resumenMes } from "@/lib/dashboard";
 import {
   esMesValido,
   etiquetaMesCorta,
@@ -58,6 +59,9 @@ export default async function Dashboard({
     MAX_PORCIONES,
   );
 
+  const esMesEnCurso = mes === mesDeHoy;
+  const resumen = resumenMes(transacciones, mes, esMesEnCurso);
+
   const barras = totalesPorMes(transacciones, meses).map((m) => ({
     ...m,
     etiqueta: etiquetaMesCorta(m.mes),
@@ -78,11 +82,13 @@ export default async function Dashboard({
         </p>
       ) : (
         <div className="flex flex-col gap-4">
+          <NumeroPrincipal resumen={resumen} mes={mes} esMesEnCurso={esMesEnCurso} />
+
           <Tarjeta titulo="Egresos por categoría">
             <CategoriasMes
               filas={filas}
               total={totalEgresos}
-              esMesEnCurso={mes === mesDeHoy}
+              esMesEnCurso={esMesEnCurso}
             />
           </Tarjeta>
 
