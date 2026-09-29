@@ -36,8 +36,19 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
 - [x] Pantalla `/dashboard`, separada de la lista
 - [x] Torta de egresos por categoría (monto y porcentaje)
 - [x] Barras agrupadas de ingresos vs egresos, últimos 6 meses
-- [x] Top 3 categorías del mes
+- [x] ~~Top 3 categorías del mes~~ → reemplazado por la lista interactiva (abajo)
 - [x] Responsive: una columna en el teléfono, dos en la compu
+
+**Dashboard, paso A**
+
+- [x] Lista de categorías interactiva: cada fila (o su porción de la torta)
+  despliega el detalle de la categoría en el mes
+- [x] Comparación de cada categoría contra el promedio de los 3 meses
+  anteriores (▲/▼ %, o "nuevo")
+- [x] Detalle: total, cantidad, % del mes, mini barras de 6 meses,
+  transacciones de mayor a menor y devoluciones aparte
+- [x] "Otras (N)" despliega las categorías que agrupa
+- [x] La categoría abierta va en la URL (`?cat=`): "atrás" cierra el detalle
 
 **Fase 4**
 
@@ -275,6 +286,18 @@ Librería: **recharts** — declarativa, se lleva bien con React 19, tiene
 `ResponsiveContainer` (que es la mitad del trabajo de hacerlo responsive) y no
 arrastra D3 entero. Cuesta ~390 KB del bundle, pero sólo lo carga `/dashboard`.
 
+**Detalle de una categoría.** Todo sale de las transacciones que la página ya
+trae (6 meses): `filasCategoriasMes` arma en el servidor cada fila con su
+comparación, su serie de 6 meses y sus transacciones, y el cliente sólo abre y
+cierra. La comparación va contra el promedio de los 3 meses anteriores si los 3
+tienen historia (un mes sin gasto en la categoría cuenta como $0); si no, contra
+el mes anterior más cercano con gasto; si no hay ninguno, "nuevo". Las
+devoluciones de la categoría (ingresos que vinieron de un resumen, o que dicen
+devolución/reintegro) se muestran aparte y no restan: el sueldo cargado en
+"Otros" no cuenta como devolución. La categoría abierta se guarda en `?cat=` con
+`window.history.pushState`/`replaceState`, que Next sincroniza con
+`useSearchParams` sin volver a pedir la página al servidor.
+
 Los colores están en `globals.css` bajo `.viz` y se mapean a cada categoría en
 `src/lib/categorias.ts` (`COLOR_CATEGORIA` + el hash de `colorDeCategoria`). Son
 8 tonos en un orden validado para daltonismo: el color sigue a la categoría, no
@@ -395,7 +418,9 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/app/auth/callback/route.ts` | Canje del `?code=` del magic link (PKCE) |
 | `src/app/auth/confirm/route.ts` | Alternativa con `token_hash` (ver abajo) |
 | `src/app/page.tsx` | Movimientos: resumen + alta + lista del mes |
-| `src/app/dashboard/page.tsx` | Dashboard: torta, top 3 y barras de 6 meses |
+| `src/app/dashboard/page.tsx` | Dashboard: torta con lista de categorías y barras de 6 meses |
+| `src/components/categorias-mes.tsx` | Lista interactiva de categorías y su detalle desplegable |
+| `src/lib/dashboard.ts` | Filas, comparación contra el promedio y detalle de cada categoría |
 | `src/app/actions/transacciones.ts` | Server actions de alta y borrado |
 | `src/app/actions/categorias.ts` | Server actions de crear y borrar categorías |
 | `src/components/selector-categoria.tsx` | Selector de categoría con alta inline |

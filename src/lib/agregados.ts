@@ -10,6 +10,9 @@ export type TotalCategoria = {
 };
 export type TotalMes = { mes: string; ingresos: number; egresos: number };
 
+/** Dónde caen las transacciones sin categoría (categoria = null). */
+export const SIN_CATEGORIA = "Sin categoría";
+
 export function totalPorTipo(
   transacciones: Transaccion[],
   tipo: Transaccion["tipo"],
@@ -38,7 +41,7 @@ export function egresosPorCategoria(
   for (const t of transacciones) {
     if (t.tipo !== "egreso") continue;
     if (t.categoria === CATEGORIA_AJUSTES) continue;
-    const clave = t.categoria ?? "Sin categoría";
+    const clave = t.categoria ?? SIN_CATEGORIA;
     totales.set(clave, (totales.get(clave) ?? 0) + t.monto);
   }
 
@@ -46,13 +49,6 @@ export function egresosPorCategoria(
     .map(([categoria, monto]) => ({ categoria, monto: redondearCentavos(monto) }))
     .filter((c) => c.monto > 0)
     .sort((a, b) => b.monto - a.monto || a.categoria.localeCompare(b.categoria));
-}
-
-/** Suma los egresos que sí van a la torta (excluye ajustes y no-positivos). */
-export function totalEgresosPorCategoria(transacciones: Transaccion[]): number {
-  return redondearCentavos(
-    egresosPorCategoria(transacciones).reduce((acc, c) => acc + c.monto, 0),
-  );
 }
 
 /**

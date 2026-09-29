@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   totalPorTipo,
   egresosPorCategoria,
-  totalEgresosPorCategoria,
   agruparCola,
   totalesPorMes,
 } from "../src/lib/agregados.ts";
@@ -68,16 +67,6 @@ test("egresosPorCategoria excluye una categoría que quedó en cero o negativa",
     t("2026-06-05", "egreso", -50, "Salud"),
   ];
   assert.deepEqual(egresosPorCategoria(datos), [{ categoria: "Comida", monto: 100 }]);
-});
-
-test("totalEgresosPorCategoria suma sólo lo que va a la torta", () => {
-  const datos = [
-    t("2026-06-03", "egreso", 45230, "Comida"),
-    t("2026-06-04", "egreso", 8400, "Entretenimiento"),
-    t("2026-06-30", "egreso", -17197.39, "Ajustes tarjeta"),
-  ];
-  // Excluye el ajuste: 45230 + 8400.
-  assert.equal(totalEgresosPorCategoria(datos), 53630);
 });
 
 test("egresosPorCategoria agrupa, ordena y descarta ingresos", () => {
