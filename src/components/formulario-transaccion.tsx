@@ -11,6 +11,7 @@ import {
   editarTransaccion,
 } from "@/app/actions/transacciones";
 import { ESTADO_INICIAL, type EstadoFormulario } from "@/lib/formulario";
+import { admiteFijo, esComercioFijo } from "@/lib/fijos";
 import { claveComercio } from "@/lib/reglas";
 import type { Transaccion } from "@/lib/types";
 import SelectorCategoria from "@/components/selector-categoria";
@@ -71,8 +72,12 @@ export default function FormularioTransaccion({
   /** Edición: se llama cuando se guardó bien (p. ej. para cerrar el modal). */
   onGuardado?: () => void;
 }) {
-  const { nombres: categorias, crear: onCrearCategoria, cuentasConocidas } =
-    useMovimientos();
+  const {
+    nombres: categorias,
+    crear: onCrearCategoria,
+    cuentasConocidas,
+    fijos,
+  } = useMovimientos();
   const editando = transaccion !== undefined;
   // Los ids tienen que ser únicos en la página: el formulario de alta y el de
   // edición (en el modal) conviven.
@@ -89,7 +94,27 @@ export default function FormularioTransaccion({
   // Tildado de entrada: si corregiste la categoría, lo más probable es que
   // quieras lo mismo la próxima vez. Se puede destildar.
   const [recordar, setRecordar] = useState(true);
+  // La casilla "Gasto fijo" sigue a la sugerencia mientras no la toques
+  // (null); una vez que la tocás, manda lo que elegiste.
+  const [fijoManual, setFijoManual] = useState<boolean | null>(null);
   const montoRef = useRef<HTMLInputElement>(null);
+
+  // Sugerencia: en el alta, si el comercio que estás escribiendo lo marcaste
+  // como fijo antes (se recalcula con cada letra). En la edición, lo que la
+  // transacción ya tiene: pre-tildar ahí cambiaría el dato al guardar sin que
+  // lo pidas. El monto nunca se toca: lo escribís vos.
+  const fijoSugerido = editando
+    ? transaccion.es_fijo === true
+    : esComercioFijo(valores.descripcion, fijos);
+  const mostrarFijo = admiteFijo(valores.tipo, valores.categoria);
+  const esFijo = mostrarFijo && (fijoManual ?? fijoSugerido);
+  // Qué aprender: sólo si la casilla quedó distinta de lo sugerido.
+  const cambioFijo =
+    mostrarFijo && fijoManual !== null && fijoManual !== fijoSugerido
+      ? fijoManual
+        ? "marcar"
+        : "olvidar"
+      : "";
 
   // La regla se ofrece sólo si cambiaste la categoría, la descripción tiene un
   // comercio reconocible y no es el ajuste de impuestos.
@@ -123,6 +148,7 @@ export default function FormularioTransaccion({
       setEstado(resultado);
       if (resultado.ok) {
         setValores(valoresVacios(fechaPorDefecto));
+        setFijoManual(null);
         montoRef.current?.focus();
       }
     });
@@ -264,6 +290,34 @@ export default function FormularioTransaccion({
           <Error mensaje={estado.errores?.cuenta} />
         </div>
       </div>
+
+      {mostrarFijo && (
+        <label className="-mt-1 flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            name="es_fijo"
+            checked={esFijo}
+            onChange={(e) => setFijoManual(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-current"
+          />
+          <span className="text-sm">
+            Gasto fijo
+            {!editando && fijoSugerido && fijoManual === null && (
+              <span className="block text-xs opacity-60">
+                Tildado solo: marcaste este comercio como fijo antes.
+              </span>
+            )}
+          </span>
+        </label>
+      )}
+      <input type="hidden" name="fijo_cambio" value={cambioFijo} />
+      {editando && (
+        <input
+          type="hidden"
+          name="es_fijo_original"
+          value={String(transaccion.es_fijo === true)}
+        />
+      )}
 
       {ofrecerRegla && (
         <label className="animar-entrada flex cursor-pointer items-start gap-2.5 rounded-lg bg-black/5 px-3 py-2 dark:bg-white/10">

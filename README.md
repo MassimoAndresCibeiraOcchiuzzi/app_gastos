@@ -138,6 +138,35 @@ una guía de [cómo agregar una funcionalidad nueva](#cómo-agregar-una-funciona
 - [x] Navegación entre los meses futuros con cuotas (flechas ‹ › o tocando una
       barra), con el detalle de las compras de cada mes
 
+**Fase 11 — Gastos fijos**
+
+- [x] Columna `transacciones.es_fijo` y tabla `comercios_fijos` con RLS (SQL
+      en `supabase/gastos_fijos.sql`)
+- [x] Casilla "Gasto fijo" en la carga manual, la edición y la revisión del
+      import; pre-tildada si el comercio se marcó como fijo antes
+- [x] Tildar o destildar a mano actualiza la memoria de ese comercio
+- [x] Tarjeta "Gastos fijos" en el Dashboard: total, cantidad y detalle del mes
+
+### Sobre los gastos fijos
+
+Es una **marca informativa**: no cambia balances, categorías, presupuestos ni
+ningún otro total. Sólo un egreso puede ser fijo (ni ingresos ni el ajuste de
+impuestos). El monto nunca se completa ni se sugiere: se pre-tilda la casilla
+y nada más.
+
+Los comercios fijos van en su propia tabla (`comercios_fijos`) y no en
+`reglas_categoria`: un comercio puede ser fijo sin tener regla de categoría y
+al revés, y así cada cosa se olvida por su lado. Usan la misma normalización y
+coincidencia que las reglas (`claveComercio`, palabras completas).
+
+Se aprende sólo de lo que el usuario **cambia**: si la casilla queda distinta
+de lo sugerido, tildar recuerda el comercio y destildar lo olvida. Al editar
+una transacción, la casilla muestra lo que la transacción ya tiene (no se
+pre-tilda, para no cambiar el dato sin que lo pidas).
+
+Si todavía no se corrió el SQL, cargar y editar siguen andando: `es_fijo` sólo
+viaja cuando es true (o cuando cambia al editar).
+
 ### Sobre las cuotas
 
 `detectarCuota` (`src/lib/cuotas.ts`) reconoce, sin importar mayúsculas: la
@@ -567,6 +596,10 @@ pero sin el aviso).
 Y [`supabase/presupuestos.sql`](supabase/presupuestos.sql), para los
 presupuestos. Sin ella el Dashboard funciona igual y la tarjeta avisa que falta.
 
+Y [`supabase/gastos_fijos.sql`](supabase/gastos_fijos.sql), para la marca de
+gasto fijo. Sin él, cargar y editar andan igual, pero tildar "Gasto fijo" da
+error.
+
 Y [`supabase/metas_ahorro.sql`](supabase/metas_ahorro.sql), para la meta de
 ahorro. Sin ella el Dashboard funciona igual y la tarjeta avisa que falta.
 
@@ -601,12 +634,15 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `src/app/auth/callback/route.ts` | Canje del `?code=` del magic link (PKCE) |
 | `src/app/auth/confirm/route.ts` | Alternativa con `token_hash` (ver abajo) |
 | `src/app/page.tsx` | Movimientos: resumen + alta + lista del mes |
-| `src/app/dashboard/page.tsx` | Dashboard: presupuestos, meta de ahorro, cuotas, torta con lista de categorías, medios de pago y barras de 6 meses |
+| `src/app/dashboard/page.tsx` | Dashboard: presupuestos, meta de ahorro, cuotas, gastos fijos, torta con lista de categorías, medios de pago y barras de 6 meses |
 | `src/components/categorias-mes.tsx` | Lista interactiva de categorías y su detalle desplegable |
 | `src/components/numero-principal.tsx` | "Gastaste $X en [mes]", comparación y balance |
 | `src/components/indicador-comparacion.tsx` | El ▲/▼ % contra el promedio, compartido |
 | `src/lib/dashboard.ts` | Filas, comparación contra el promedio, detalle de cada categoría, número principal y reparto por cuenta |
 | `src/app/actions/transacciones.ts` | Server actions de alta, edición, borrado e importación |
+| `src/lib/fijos.ts` | Coincidencia de comercios fijos, aprendizaje y gastos fijos del mes (puro, testeado) |
+| `src/lib/fijos-servidor.ts` | Recordar y olvidar comercios fijos, sólo servidor |
+| `src/components/gastos-fijos.tsx` | Tarjeta de gastos fijos del Dashboard |
 | `src/lib/cuotas.ts` | Parser de cuotas, agrupado por compra y proyección (puro, testeado) |
 | `src/components/cuotas-comprometidas.tsx` | Tarjeta de cuotas comprometidas del Dashboard |
 | `src/app/actions/metas.ts` | Server actions de guardar y borrar la meta de ahorro |
@@ -652,6 +688,7 @@ Abrir http://localhost:3000 → redirige a `/login`.
 | `supabase/checks_transacciones.sql` | CHECK constraints de `transacciones` |
 | `supabase/resumenes_importados.sql` | Hashes de los PDF importados, para avisar repetidos |
 | `supabase/diagnostico_checks.sql` | Qué filas existentes violarían esos CHECKs (sólo lectura) |
+| `supabase/gastos_fijos.sql` | `transacciones.es_fijo` + tabla `comercios_fijos` con RLS |
 | `supabase/metas_ahorro.sql` | Meta de ahorro (una por usuario) + políticas RLS |
 | `supabase/presupuestos.sql` | Presupuestos mensuales por categoría + políticas RLS |
 | `supabase/reglas_categoria.sql` | Reglas de categoría por comercio + políticas RLS |

@@ -10,6 +10,8 @@ type ContextoMovimientos = ReturnType<typeof useCategorias> & {
   cuentasConocidas: string[];
   /** Reglas por comercio guardadas. Llegan frescas del servidor. */
   reglas: ReglaCategoria[];
+  /** Patrones de los comercios marcados como gasto fijo. */
+  fijos: string[];
 };
 
 const Contexto = createContext<ContextoMovimientos | null>(null);
@@ -26,16 +28,18 @@ export default function ProveedorMovimientos({
   categoriasIniciales,
   cuentasConocidas,
   reglas,
+  fijos,
   children,
 }: {
   categoriasIniciales: CategoriaUsuario[];
   cuentasConocidas: string[];
   reglas: ReglaCategoria[];
+  fijos: string[];
   children: React.ReactNode;
 }) {
   const categorias = useCategorias(categoriasIniciales);
   return (
-    <Contexto.Provider value={{ ...categorias, cuentasConocidas, reglas }}>
+    <Contexto.Provider value={{ ...categorias, cuentasConocidas, reglas, fijos }}>
       {children}
     </Contexto.Provider>
   );

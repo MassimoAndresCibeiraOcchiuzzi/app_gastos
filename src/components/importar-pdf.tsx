@@ -27,6 +27,7 @@ import {
   type Metodo,
   type TotalResumen,
 } from "@/lib/extraccion";
+import { admiteFijo, type PedidoFijo } from "@/lib/fijos";
 import { claveComercio, type PedidoRegla } from "@/lib/reglas";
 import type { EntradaTransaccion } from "@/lib/validacion";
 
@@ -55,6 +56,13 @@ type Fila = {
   regla?: string;
   /** Recordar la categoría corregida para este comercio (tildado de entrada). */
   recordar: boolean;
+  /** Casilla "Gasto fijo" de la fila. */
+  fijo: boolean;
+  /**
+   * Con qué llegó la casilla: tildada si el comercio se marcó como fijo
+   * antes. Si la cambiás, se aprende; si no, no se toca nada.
+   */
+  fijoSugerido: boolean;
   /**
    * El ajuste neteado de impuestos. No es un consumo: su tipo queda fijo en
    * egreso y su monto puede ser negativo (más devoluciones que percepciones).
@@ -97,6 +105,8 @@ function aFila(item: ItemExtraido, id: number, fechaImputacion: string): Fila {
     categoriaInicial: campos.categoria,
     regla: item.regla,
     recordar: true,
+    fijo: item.esFijo === true,
+    fijoSugerido: item.esFijo === true,
   };
 }
 
@@ -141,6 +151,8 @@ function aFilaAjuste(ajuste: Ajuste, id: number, fechaImputacion: string): Fila 
     categoria: CATEGORIA_AJUSTES,
     categoriaInicial: CATEGORIA_AJUSTES,
     recordar: false,
+    fijo: false,
+    fijoSugerido: false,
     esAjuste: true,
   };
 }
@@ -349,6 +361,8 @@ export default function ImportarPdf({
       // El ajuste no lleva cuenta: no es un consumo de ninguna en particular.
       cuenta: f.esAjuste ? "" : cuenta,
       fecha: f.fecha,
+      // El monto es siempre el del resumen: la marca de fijo no lo toca.
+      es_fijo: f.fijo && admiteFijo(f.tipo, f.categoria),
       // Si el monto puede ser negativo lo decide el servidor, por categoría y
       // tipo (ver `admiteMontoNegativo`): el ajuste ya viaja como egreso de
       // "Ajustes tarjeta".
@@ -361,11 +375,18 @@ export default function ImportarPdf({
       .filter((f) => f.recordar && patronParaRecordar(f) !== null)
       .map((f) => ({ descripcion: f.descripcion, categoria: f.categoria }));
 
+    // Las casillas "Gasto fijo" que cambiaste respecto de lo sugerido: se
+    // aprenden (tildar recuerda el comercio, destildar lo olvida).
+    const fijos: PedidoFijo[] = incluidas
+      .filter((f) => admiteFijo(f.tipo, f.categoria) && f.fijo !== f.fijoSugerido)
+      .map((f) => ({ descripcion: f.descripcion, fijo: f.fijo }));
+
     iniciar(async () => {
       const resultado = await importarTransacciones(
         entradas,
         hash ?? undefined,
         reglas,
+        fijos,
       );
       if (!resultado.ok) {
         setError(resultado.error);
@@ -517,6 +538,24 @@ export default function ImportarPdf({
             </>
           )}
         </p>
+
+        {!fila.esAjuste && admiteFijo(fila.tipo, fila.categoria) && (
+          <label className="mt-1.5 ml-[26px] flex cursor-pointer items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={fila.fijo}
+              onChange={(e) => editar(fila.id, "fijo", e.target.checked)}
+              aria-label={`Gasto fijo: ${fila.descripcion || "esta fila"}`}
+              className="mt-px h-3.5 w-3.5 shrink-0 accent-current"
+            />
+            <span>
+              Gasto fijo
+              {fila.fijoSugerido && fila.fijo && (
+                <span className="opacity-60"> (lo marcaste como fijo antes)</span>
+              )}
+            </span>
+          </label>
+        )}
 
         {patron && (
           <label className="animar-entrada mt-1.5 ml-[26px] flex cursor-pointer items-start gap-2 text-xs">

@@ -161,3 +161,18 @@ export async function traerMeta(): Promise<{
     error: null,
   };
 }
+
+/**
+ * Los comercios que el usuario marcó como gasto fijo (sus patrones). Si la
+ * tabla no existe todavía (no corrieron supabase/gastos_fijos.sql) o falla,
+ * lista vacía: la casilla simplemente no se pre-tilda.
+ */
+export async function traerComerciosFijos(): Promise<string[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("comercios_fijos").select("patron_comercio");
+  if (error) {
+    console.error("[fijos] no se pudieron leer:", error.message);
+    return [];
+  }
+  return (data ?? []).map((f: { patron_comercio: string }) => f.patron_comercio);
+}
