@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { EstadoFormulario } from "@/lib/formulario";
 import { esHashValido } from "@/lib/importacion";
+import type { PedidoFijo } from "@/lib/fijos";
+import { aplicarCambiosFijos } from "@/lib/fijos-servidor";
 import type { PedidoRegla } from "@/lib/reglas";
 import { guardarReglas } from "@/lib/reglas-servidor";
 import {
@@ -25,8 +27,24 @@ function leerFormulario(formData: FormData): EntradaTransaccion {
     categoria: texto("categoria"),
     cuenta: texto("cuenta"),
     fecha: texto("fecha"),
+    es_fijo: formData.get("es_fijo") === "on",
   };
 }
+
+/**
+ * Si el usuario cambió a mano la casilla "Gasto fijo" respecto de lo que se
+ * le sugirió, el formulario manda `fijo_cambio` = "marcar" u "olvidar".
+ * Sin eso (no la tocó), no hay nada que aprender.
+ */
+function pedidoFijo(formData: FormData, descripcion: string): PedidoFijo[] {
+  const cambio = formData.get("fijo_cambio");
+  if (cambio === "marcar") return [{ descripcion, fijo: true }];
+  if (cambio === "olvidar") return [{ descripcion, fijo: false }];
+  return [];
+}
+
+const AVISO_FIJO =
+  "Se guardó, pero no pudimos recordar si este comercio es un gasto fijo";
 
 export async function crearTransaccion(
   formData: FormData,
@@ -51,6 +69,13 @@ export async function crearTransaccion(
   if (error) return { ok: false, error: error.message };
 
   revalidar();
+
+  const errorFijo = await aplicarCambiosFijos(
+    supabase,
+    user.id,
+    pedidoFijo(formData, resultado.valor.descripcion),
+  );
+  if (errorFijo) return { ok: true, aviso: `${AVISO_FIJO}: ${errorFijo}` };
   return { ok: true };
 }
 
@@ -90,11 +115,17 @@ export async function editarTransaccion(
     return { ok: false, error: "Se cerró tu sesión. Volvé a entrar." };
   }
 
+  // `es_fijo` sólo va si cambió: así, si todavía no se corrió
+  // supabase/gastos_fijos.sql, editar lo demás sigue andando.
+  const { es_fijo, ...resto } = resultado.valor;
+  const fijoAntes = formData.get("es_fijo_original") === "true";
+  const cambios = es_fijo !== fijoAntes ? { ...resto, es_fijo } : resto;
+
   // `.select` para saber si tocó una fila: con RLS, un id ajeno o borrado no
   // da error, da cero filas.
   const { data, error } = await supabase
     .from("transacciones")
-    .update(resultado.valor)
+    .update(cambios)
     .eq("id", id)
     .select("id");
 
@@ -107,6 +138,12 @@ export async function editarTransaccion(
   }
 
   revalidar();
+
+  const errorFijo = await aplicarCambiosFijos(
+    supabase,
+    user.id,
+    pedidoFijo(formData, resultado.valor.descripcion),
+  );
 
   if (formData.get("recordar") === "on") {
     const reglas = await guardarReglas(supabase, user.id, [
@@ -123,6 +160,7 @@ export async function editarTransaccion(
     }
   }
 
+  if (errorFijo) return { ok: true, aviso: `${AVISO_FIJO}: ${errorFijo}` };
   return { ok: true };
 }
 
@@ -141,13 +179,15 @@ export type ResultadoImportacion =
  * historial de avisos: no toca montos ni datos de nadie más.
  *
  * `reglas` son las categorías que el usuario corrigió en la revisión y pidió
- * recordar. Se guardan después de las filas; si fallan, la importación igual
+ * recordar; `fijos`, las casillas "Gasto fijo" que cambió respecto de lo
+ * sugerido. Se guardan después de las filas; si fallan, la importación igual
  * salió bien y sólo no se recuerdan.
  */
 export async function importarTransacciones(
   entradas: EntradaTransaccion[],
   hashResumen?: string,
   reglas: PedidoRegla[] = [],
+  fijos: PedidoFijo[] = [],
 ): Promise<ResultadoImportacion> {
   if (!Array.isArray(entradas) || entradas.length === 0) {
     return { ok: false, error: "No hay filas para importar." };
@@ -201,6 +241,7 @@ export async function importarTransacciones(
     const resultado = await guardarReglas(supabase, user.id, reglas);
     if (resultado.ok) reglasGuardadas = resultado.guardadas;
   }
+  await aplicarCambiosFijos(supabase, user.id, fijos);
 
   revalidar();
   return { ok: true, importadas: filas.length, reglasGuardadas };

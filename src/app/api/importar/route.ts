@@ -8,7 +8,12 @@ import {
   promptExtraccion,
 } from "@/lib/extraccion-prompt";
 import { CATEGORIAS_CONSUMO, categoriasParaSugerir } from "@/lib/categorias";
-import { traerCategoriasUsuario, traerReglas } from "@/lib/consultas";
+import {
+  traerCategoriasUsuario,
+  traerComerciosFijos,
+  traerReglas,
+} from "@/lib/consultas";
+import { esComercioFijo } from "@/lib/fijos";
 import { aplicarReglas } from "@/lib/reglas";
 import {
   LARGO_FIRMA_PDF,
@@ -188,9 +193,10 @@ export async function POST(request: NextRequest) {
     // del sistema y las propias del usuario. La misma lista va al prompt, al
     // `enum` del esquema y a la validación de la respuesta. Si no se pueden
     // leer las propias, se sigue con las del sistema.
-    const [propias, reglas] = await Promise.all([
+    const [propias, reglas, fijos] = await Promise.all([
       traerCategoriasUsuario(),
       traerReglas(),
+      traerComerciosFijos(),
     ]);
     const categorias = categoriasParaSugerir(propias.map((c) => c.nombre));
 
@@ -273,10 +279,14 @@ export async function POST(request: NextRequest) {
     // No ahorra tokens: la IA tiene que leer el resumen igual para saber qué
     // comercios hay, y la categoría es una palabra por ítem de la respuesta.
     // Lo que da es que una corrección no se repita en cada resumen.
+    // Y los comercios marcados como fijos vienen con la casilla tildada. El
+    // monto no se toca: es siempre el del resumen.
     const conReglas = aplicarReglas(resultado.items, reglas, [
       ...CATEGORIAS_CONSUMO,
       ...propias.map((c) => c.nombre),
-    ]);
+    ]).map((item) =>
+      esComercioFijo(item.descripcion, fijos) ? { ...item, esFijo: true } : item,
+    );
     const porRegla = conReglas.filter((i) => i.regla).length;
     if (porRegla > 0) {
       console.info(`[importar] ${porRegla} ítems categorizados por regla`);

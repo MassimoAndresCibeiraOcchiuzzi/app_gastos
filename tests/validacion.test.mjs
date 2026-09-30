@@ -24,6 +24,7 @@ test("validarTransaccion normaliza una entrada correcta", () => {
     tipo: "egreso",
     categoria: "Comida",
     cuenta: "Efectivo",
+    es_fijo: false,
   });
 });
 
@@ -161,11 +162,30 @@ test("validarTransaccion junta todos los errores de una", () => {
 
 test("aFilaTransaccion agrega el usuario y el origen", () => {
   const { valor } = validarTransaccion(base);
+  const { es_fijo, ...resto } = valor;
+  assert.equal(es_fijo, false);
+  // No fijo: `es_fijo` no viaja (la columna tiene default false), así cargar
+  // sigue andando aunque no se haya corrido supabase/gastos_fijos.sql.
   assert.deepEqual(aFilaTransaccion(valor, "u-1", "pdf"), {
-    ...valor,
+    ...resto,
     usuario_id: "u-1",
     origen: "pdf",
   });
+});
+
+test("es_fijo: sólo en egresos que no son el ajuste, y viaja cuando es true", () => {
+  const fijo = validarTransaccion({ ...base, es_fijo: true });
+  assert.equal(fijo.valor.es_fijo, true);
+  assert.equal(aFilaTransaccion(fijo.valor, "u", "manual").es_fijo, true);
+
+  const ingreso = validarTransaccion({ ...base, tipo: "ingreso", es_fijo: true });
+  assert.equal(ingreso.valor.es_fijo, false);
+
+  const ajuste = validarTransaccion({ ...base, categoria: "Ajustes tarjeta", monto: "-10", es_fijo: true });
+  assert.equal(ajuste.valor.es_fijo, false);
+
+  // Sólo `true` cuenta: un "true" en texto o cualquier otra cosa, no.
+  assert.equal(validarTransaccion({ ...base, es_fijo: "true" }).valor.es_fijo, false);
 });
 
 test("el monto precargado al editar se vuelve a leer igual", async () => {

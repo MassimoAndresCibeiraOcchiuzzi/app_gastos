@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   traerCategoriasUsuario,
+  traerComerciosFijos,
   traerReglas,
   traerTransacciones,
 } from "@/lib/consultas";
@@ -33,10 +34,11 @@ export default async function Home({
   const mes = esMesValido(mesPedido) ? mesPedido : mesDeHoy;
   const { desde, hasta } = rangoMes(mes);
 
-  const [{ transacciones, error }, categoriasUsuario, reglas] = await Promise.all([
+  const [{ transacciones, error }, categoriasUsuario, reglas, fijos] = await Promise.all([
     traerTransacciones({ desde, hasta }),
     traerCategoriasUsuario(),
     traerReglas(),
+    traerComerciosFijos(),
   ]);
 
   const ingresos = totalPorTipo(transacciones, "ingreso");
@@ -62,6 +64,7 @@ export default async function Home({
         categoriasIniciales={categoriasUsuario}
         cuentasConocidas={cuentasConocidas}
         reglas={reglas}
+        fijos={fijos}
       >
         <PanelAlta fechaPorDefecto={mes === mesDeHoy ? hoyISO() : desde} />
 

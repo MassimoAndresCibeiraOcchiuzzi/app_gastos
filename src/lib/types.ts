@@ -11,6 +11,11 @@ export type Transaccion = {
   categoria: string | null;
   cuenta: string | null;
   origen: Origen;
+  /**
+   * Gasto fijo (marca informativa, supabase/gastos_fijos.sql). Opcional: si
+   * todavía no se corrió ese SQL, la columna no viene.
+   */
+  es_fijo?: boolean;
   usuario_id: string;
   created_at: string;
 };

@@ -20,7 +20,10 @@ export default function ListaTransacciones({
     <ul className="divide-y divide-black/10 overflow-hidden rounded-xl border border-black/10 dark:divide-white/10 dark:border-white/15">
       {transacciones.map((t) => {
         const esIngreso = t.tipo === "ingreso";
-        const detalle = [t.categoria, t.cuenta].filter(Boolean).join(" · ");
+        // "Fijo" va primero: la línea se trunca en el celular y así no se pierde.
+        const detalle = [t.es_fijo ? "Fijo" : null, t.categoria, t.cuenta]
+          .filter(Boolean)
+          .join(" · ");
 
         return (
           <li key={t.id} className="flex items-center gap-3 px-3 py-2.5">

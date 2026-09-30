@@ -11,6 +11,7 @@ import Navegacion from "@/components/navegacion";
 import SelectorMes from "@/components/selector-mes";
 import CategoriasMes from "@/components/categorias-mes";
 import CuotasComprometidas from "@/components/cuotas-comprometidas";
+import GastosFijos from "@/components/gastos-fijos";
 import MetaAhorroTarjeta from "@/components/meta-ahorro";
 import NumeroPrincipal from "@/components/numero-principal";
 import PresupuestosMes from "@/components/presupuestos-mes";
@@ -20,6 +21,7 @@ import { totalesPorMes } from "@/lib/agregados";
 import { CATEGORIAS_CONSUMO } from "@/lib/categorias";
 import { filasCategoriasMes, repartoPorCuenta, resumenMes } from "@/lib/dashboard";
 import { MESES_CUOTAS, comprasEnCuotas, proyectarCuotas } from "@/lib/cuotas";
+import { gastosFijosMes } from "@/lib/fijos";
 import { progresoMeta, rangoParaMeta } from "@/lib/metas";
 import { avanceDelMes, progresoPresupuestos } from "@/lib/presupuestos";
 import {
@@ -101,6 +103,8 @@ export default async function Dashboard({
   const esMesEnCurso = mes === mesDeHoy;
   const resumen = resumenMes(transacciones, mes, esMesEnCurso);
   const { segmentos: porCuenta } = repartoPorCuenta(transacciones, mes);
+  // Marca informativa: no entra en ningún otro cálculo.
+  const fijos = gastosFijosMes(transacciones, mes);
 
   // Presupuestos: lo gastado de cada tope contra lo que pasó del mes.
   const avance = avanceDelMes(mes, hoy);
@@ -163,6 +167,14 @@ export default async function Dashboard({
               <CuotasComprometidas proyeccion={cuotas} />
             </Tarjeta>
           )}
+
+          <Tarjeta titulo="Gastos fijos">
+            <GastosFijos
+              gastos={fijos.gastos}
+              total={fijos.total}
+              egresosMes={resumen.egresos}
+            />
+          </Tarjeta>
 
           <Tarjeta titulo="Egresos por categoría">
             <CategoriasMes

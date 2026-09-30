@@ -26,6 +26,8 @@ export type ItemExtraido = {
    * la IA, el patrón de esa regla. Ver `aplicarReglas`.
    */
   regla?: string;
+  /** El comercio fue marcado como gasto fijo antes: la casilla viene tildada. */
+  esFijo?: boolean;
 };
 
 /**

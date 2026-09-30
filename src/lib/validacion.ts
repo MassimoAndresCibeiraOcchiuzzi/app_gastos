@@ -1,4 +1,5 @@
 import { CATEGORIA_AJUSTES, MAX_CATEGORIA } from "./categorias";
+import { admiteFijo } from "./fijos";
 import { MONTO_MAXIMO, esFechaISO, parsearMonto } from "./formato";
 import type { CampoFormulario } from "./formulario";
 import type { Origen, Tipo } from "./types";
@@ -22,6 +23,8 @@ export type EntradaTransaccion = {
   categoria: string;
   cuenta: string;
   fecha: string;
+  /** Casilla "Gasto fijo". Opcional: lo que no la trae, no es fijo. */
+  es_fijo?: boolean;
 };
 
 /**
@@ -42,6 +45,8 @@ export type TransaccionValida = {
   tipo: Tipo;
   categoria: string;
   cuenta: string | null;
+  /** Sólo puede ser true en un egreso que no sea el ajuste (`admiteFijo`). */
+  es_fijo: boolean;
 };
 
 export type ResultadoValidacion =
@@ -116,6 +121,9 @@ export function validarTransaccion(
       tipo: tipo as Tipo,
       categoria,
       cuenta: cuenta === "" ? null : cuenta,
+      // Un ingreso tildado como fijo se guarda como no fijo, sin error: la
+      // casilla ni se muestra para ingresos.
+      es_fijo: entrada.es_fijo === true && admiteFijo(tipo, categoria),
     },
   };
 }
@@ -126,5 +134,9 @@ export function aFilaTransaccion(
   usuarioId: string,
   origen: Origen,
 ) {
-  return { ...valor, origen, usuario_id: usuarioId };
+  const { es_fijo, ...resto } = valor;
+  // `es_fijo` sólo viaja si es true: así, si todavía no se corrió
+  // supabase/gastos_fijos.sql, cargar un gasto no fijo sigue andando (la
+  // columna tiene default false).
+  return { ...resto, ...(es_fijo ? { es_fijo } : {}), origen, usuario_id: usuarioId };
 }
