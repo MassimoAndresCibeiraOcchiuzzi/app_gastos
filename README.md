@@ -164,8 +164,12 @@ de lo sugerido, tildar recuerda el comercio y destildar lo olvida. Al editar
 una transacción, la casilla muestra lo que la transacción ya tiene (no se
 pre-tilda, para no cambiar el dato sin que lo pidas).
 
-Si todavía no se corrió el SQL, cargar y editar siguen andando: `es_fijo` sólo
-viaja cuando es true (o cuando cambia al editar).
+`es_fijo` viaja siempre explícito (true o false) en cada fila que se inserta.
+En un import, supabase-js arma la lista de columnas con la unión de las claves
+de todas las filas y a la que no trae una le pone NULL: omitirlo en las no
+fijas rompía el NOT NULL en cuanto alguna fila del import venía fija. Por eso
+`supabase/gastos_fijos.sql` es obligatorio: sin la columna, cargar e importar
+fallan.
 
 ### Sobre las cuotas
 
@@ -597,8 +601,7 @@ Y [`supabase/presupuestos.sql`](supabase/presupuestos.sql), para los
 presupuestos. Sin ella el Dashboard funciona igual y la tarjeta avisa que falta.
 
 Y [`supabase/gastos_fijos.sql`](supabase/gastos_fijos.sql), para la marca de
-gasto fijo. Sin él, cargar y editar andan igual, pero tildar "Gasto fijo" da
-error.
+gasto fijo. **Obligatorio**: sin él, cargar e importar transacciones fallan.
 
 Y [`supabase/metas_ahorro.sql`](supabase/metas_ahorro.sql), para la meta de
 ahorro. Sin ella el Dashboard funciona igual y la tarjeta avisa que falta.

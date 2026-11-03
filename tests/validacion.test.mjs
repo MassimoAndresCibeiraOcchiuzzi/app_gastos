@@ -112,7 +112,7 @@ test("aFilaTransaccion no arrastra campos extra que mande el cliente", () => {
   const r = validarTransaccion({ ...base, permitirMontoNegativo: true, x: 1 });
   const fila = aFilaTransaccion(r.valor, "u1", "pdf");
   assert.deepEqual(Object.keys(fila).sort(), [
-    "categoria", "cuenta", "descripcion", "fecha", "monto", "origen", "tipo", "usuario_id",
+    "categoria", "cuenta", "descripcion", "es_fijo", "fecha", "monto", "origen", "tipo", "usuario_id",
   ]);
 });
 
@@ -162,21 +162,34 @@ test("validarTransaccion junta todos los errores de una", () => {
 
 test("aFilaTransaccion agrega el usuario y el origen", () => {
   const { valor } = validarTransaccion(base);
-  const { es_fijo, ...resto } = valor;
-  assert.equal(es_fijo, false);
-  // No fijo: `es_fijo` no viaja (la columna tiene default false), así cargar
-  // sigue andando aunque no se haya corrido supabase/gastos_fijos.sql.
   assert.deepEqual(aFilaTransaccion(valor, "u-1", "pdf"), {
-    ...resto,
+    ...valor,
+    es_fijo: false,
     usuario_id: "u-1",
     origen: "pdf",
   });
+});
+
+test("aFilaTransaccion: es_fijo siempre explícito y todas las filas con las mismas claves", () => {
+  // Regresión: en un insert de varias filas, supabase-js usa la unión de las
+  // claves como columnas y a la fila que no trae una le manda NULL. Si las no
+  // fijas omitían es_fijo, un import con fijas y no fijas rompía el NOT NULL.
+  const filas = [
+    validarTransaccion({ ...base, es_fijo: true }),
+    validarTransaccion(base),
+    validarTransaccion({ ...base, tipo: "ingreso", es_fijo: true }),
+  ].map((r) => aFilaTransaccion(r.valor, "u", "pdf"));
+  const claves = filas.map((f) => Object.keys(f).sort().join(","));
+  assert.equal(new Set(claves).size, 1, claves.join(" | "));
+  assert.deepEqual(filas.map((f) => f.es_fijo), [true, false, false]);
+  assert.ok(filas.every((f) => typeof f.es_fijo === "boolean"));
 });
 
 test("es_fijo: sólo en egresos que no son el ajuste, y viaja cuando es true", () => {
   const fijo = validarTransaccion({ ...base, es_fijo: true });
   assert.equal(fijo.valor.es_fijo, true);
   assert.equal(aFilaTransaccion(fijo.valor, "u", "manual").es_fijo, true);
+  assert.equal(aFilaTransaccion(validarTransaccion(base).valor, "u", "manual").es_fijo, false);
 
   const ingreso = validarTransaccion({ ...base, tipo: "ingreso", es_fijo: true });
   assert.equal(ingreso.valor.es_fijo, false);

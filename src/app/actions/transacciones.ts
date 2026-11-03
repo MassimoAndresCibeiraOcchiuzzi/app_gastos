@@ -219,7 +219,13 @@ export async function importarTransacciones(
     filas.push(aFilaTransaccion(resultado.valor, user.id, "pdf"));
   }
 
-  const { error } = await supabase.from("transacciones").insert(filas);
+  // `defaultToNull: false`: en un insert de varias filas, si alguna no trae
+  // una columna que otra sí, que la base use el default de esa columna y no
+  // NULL. Las filas ya traen todas las mismas claves (ver aFilaTransaccion);
+  // esto es la red por si en el futuro alguna deja de traer una.
+  const { error } = await supabase
+    .from("transacciones")
+    .insert(filas, { defaultToNull: false });
   if (error) return { ok: false, error: error.message };
 
   // Las filas ya están guardadas: si registrar el hash falla, la importación
