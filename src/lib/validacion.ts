@@ -134,9 +134,11 @@ export function aFilaTransaccion(
   usuarioId: string,
   origen: Origen,
 ) {
-  const { es_fijo, ...resto } = valor;
-  // `es_fijo` sólo viaja si es true: así, si todavía no se corrió
-  // supabase/gastos_fijos.sql, cargar un gasto no fijo sigue andando (la
-  // columna tiene default false).
-  return { ...resto, ...(es_fijo ? { es_fijo } : {}), origen, usuario_id: usuarioId };
+  // Todas las filas con las mismas claves, y `es_fijo` siempre explícito.
+  // En un insert de varias filas (la importación), supabase-js arma la lista
+  // de columnas con la unión de las claves de todas las filas, y a la fila
+  // que no trae una le pone NULL en vez del default de la columna: omitir
+  // `es_fijo` en las no fijas rompía el NOT NULL en cuanto alguna fila del
+  // mismo import venía fija.
+  return { ...valor, es_fijo: valor.es_fijo === true, origen, usuario_id: usuarioId };
 }
